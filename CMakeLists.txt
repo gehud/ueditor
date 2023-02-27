@@ -9,7 +9,6 @@ file(GLOB_RECURSE UEDITOR_SOURCE_FILES "src/*.h" "src/*.cpp")
 
 add_executable(${PROJECT_NAME} ${UEDITOR_SOURCE_FILES})
 
-set(UENGINE_INSTALL TRUE CACHE BOOL "" FORCE)
 add_subdirectory("external/uengine")
 
 target_link_libraries(${PROJECT_NAME} PRIVATE UEngine)
