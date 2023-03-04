@@ -5,13 +5,11 @@
 using namespace uengine;
 
 namespace ueditor {
-	class library_loader {
+	class Library {
 	public:
-		library_loader();
+		Library(const String& path);
 
-		~library_loader();
-
-		void open(const String& path);
+		~Library();
 
 		void close();
 

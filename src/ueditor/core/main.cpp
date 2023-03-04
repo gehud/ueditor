@@ -2,7 +2,7 @@
 #include <uengine/core/entry.h>
 
 #include "reflection.h"
-#include "library_loader.h"
+#include "ueditor/core/library.h"
 #include "ueditor/core/output_window.h"
 #include "ueditor/core/viewport_window.h"
 
@@ -209,6 +209,7 @@ namespace ueditor {
 		SharedPtr<Framebuffer> _framebuffer;
 		Entity _camera;
 		Entity _cube;
+		SharedPtr<Library> _scripts;
 
 		void open_project(const String& path) {
 			_project_path = path;
@@ -222,18 +223,18 @@ namespace ueditor {
 			}
 
 			auto data_path = _project_path + "/.uengine";
-			/*if (!directory::exists(data_path)) {
-				auto result = directory::create(data_path);
+			if (!Path::exists(data_path)) {
+				auto result = Directory::create(data_path);
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
-			FileStream fs(data_path + "/CMakeLists.txt", StreamMode::out);
+			FileStream fs(data_path + "/CMakeLists.txt", StreamMode::Out);
 			UENGINE_ASSERT(fs, "Failed to create CMakeLists.txt.");
 			auto install_prefix = (Path::current() + "/..").as_string().replace('\\', '/');
 			fs << "cmake_minimum_required(VERSION 3.10)\n";
 			fs << "set(CMAKE_CXX_STANDARD 23)\n";
 			fs << "set(CMAKE_CXX_STANDARD_REQUIRED TRUE)\n";
 			fs << "project(Example)\n";
-			fs << "file(GLOB_RECURSE EXAMPLE_SOURCE_FILES \"../source/*.h\" \"../source/*.cpp\" \"source/*.h\" \"source/*.cpp\")\n";
+			fs << "file(GLOB_RECURSE EXAMPLE_SOURCE_FILES \"../src/*.h\" \"../src/*.cpp\" \"src/*.h\" \"src/*.cpp\")\n";
 			fs << "add_library(${PROJECT_NAME} SHARED ${EXAMPLE_SOURCE_FILES})\n";
 			fs << "target_include_directories(${PROJECT_NAME} PUBLIC \"../source\" \"source\" \"" << install_prefix + "/include" << "\")\n";
 			fs << "target_link_directories(${PROJECT_NAME} PRIVATE \"" << install_prefix + "/lib" << "\" \"" << install_prefix + "/bin" << "\")\n";
@@ -242,60 +243,63 @@ namespace ueditor {
 			fs << "set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME \"example\")\n";
 			fs << "install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})";
 			fs.close();
-			auto src_path = data_path + "/source";
-			if (!directory::exists(src_path)) {
-				auto result = directory::create(src_path);
+			auto src_path = data_path + "/src";
+			if (!Path::exists(src_path)) {
+				auto result = Directory::create(src_path);
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
 
 			auto build_path = data_path + "/build";
-			if (!directory::exists(build_path)) {
-				auto result = directory::create(build_path);
-				UENGINE_ASSERT(result, "Failed to create directory.");
-			}*/
-
-			auto install_path = data_path + "/install";
-			/*if (!directory::exists(install_path)) {
-				auto result = directory::create(install_path);
+			if (!Path::exists(build_path)) {
+				auto result = Directory::create(build_path);
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
 
-			auto assembly = reflection::reflect(_project_path + "/source");
+			auto install_path = data_path + "/install";
+			if (!Path::exists(install_path)) {
+				auto result = Directory::create(install_path);
+				UENGINE_ASSERT(result, "Failed to create directory.");
+			}
 
-			FileStream glue_h_stream(src_path + "/glue.h", StreamMode::out);
+			auto assembly = reflection::reflect(_project_path + "/src");
+
+			FileStream glue_h_stream(src_path + "/glue.h", StreamMode::Out);
 			glue_h_stream << "#pragma once\n";
-			glue_h_stream << "#include <uengine.h>\n";
+			glue_h_stream << "#include <uengine/core/system.h>\n";
 			glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API int get_system_count();\n";
 			glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API void get_systems(char** names, int* ids);\n";
 			for (auto& type : assembly.get_types()) {
-				glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API uengine::system* allocate_" << type.get_name() << "();\n";
+				glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API uengine::System* allocate_" << type.get_name() << "();\n";
+				glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API void delete_" << type.get_name() << "(uengine::System*);\n";
 			}
 			glue_h_stream.close();
 
-			FileStream glue_cpp_stream(src_path + "/glue.cpp", StreamMode::out);
+			FileStream glue_cpp_stream(src_path + "/glue.cpp", StreamMode::Out);
 			glue_cpp_stream << "#include \"glue.h\"\n";
 			for (auto& type : assembly.get_types()) {
-				glue_cpp_stream << "#include \"" << Path::relative(type.get_path(), _project_path + "/source").as_string().get_data() << "\"\n";
-				glue_cpp_stream << "uengine::system* allocate_" << type.get_name() << "() {\n";
+				glue_cpp_stream << "#include \"" << Path::relative(type.get_path(), _project_path + "/source").as_string().data() << "\"\n";
+				glue_cpp_stream << "uengine::System* allocate_" << type.get_name() << "() {\n";
 				glue_cpp_stream << "	return new " << type.get_name() << "();\n";
 				glue_cpp_stream << "}\n";
+				glue_cpp_stream << "void delete_" << type.get_name() << "(uengine::System* ptr) {\n";
+				glue_cpp_stream << "	delete static_cast<" << type.get_name() << "*>(ptr);\n";
+				glue_cpp_stream << "}\n";
 			}
-			glue_cpp_stream << "int get_system_count() { return " << assembly.get_types().get_count() << "; }\n";
+			glue_cpp_stream << "int get_system_count() { return " << assembly.get_types().count() << "; }\n";
 			glue_cpp_stream << "void get_systems(char** names, int* ids) {\n";
-			for (int i = 0; i < assembly.get_types().get_count(); i++) {
+			for (int i = 0; i < assembly.get_types().count(); i++) {
 				glue_cpp_stream << "	strcpy(names[" << i << "], \"" << assembly.get_types()[i].get_name() << "\");\n";
-				glue_cpp_stream << "	ids[" << i << "] = uengine::type_info(typeid(" << assembly.get_types()[i].get_name() << ")).hash();\n";
+				glue_cpp_stream << "	ids[" << i << "] = typeid(" << assembly.get_types()[i].get_name() << ").hash_code();\n";
 			}
 			glue_cpp_stream << "}";
 			glue_cpp_stream.close();
 
 			auto command = "cd " + data_path + "/build" + " && cmake .. && cmake --build . && cmake --install . --prefix \"" + data_path + "/install\" --config Debug";
-			std::system(command.get_data());*/
+			std::system(command.data());
 
-			library_loader ll;
-			ll.open(install_path + "/bin/example.dll");
-			auto c = ll.get<int()>("get_system_count");
-			auto s = ll.get<void(char**, int*)>("get_systems");
+			_scripts = make_shared<Library>(install_path + "/bin/example.dll");
+			auto c = _scripts->get<int()>("get_system_count");
+			auto s = _scripts->get<void(char**, int*)>("get_systems");
 			int count = c();
 			char** names = new char*[count];
 			for (int i = 0; i < count; i++) {
@@ -305,15 +309,12 @@ namespace ueditor {
 			s(names, ids);
 
 			for (int i = 0; i < count; i++) {
-				UENGINE_LOG_INFO(ids[i]);
-				UENGINE_LOG_INFO(names[i]);
-				auto a = ll.get<System*()>("allocate_" + String(names[i]));
-				World::register_system(ids[i], a);
+				auto a = _scripts->get<System*()>("allocate_" + String(names[i]));
+				auto d = _scripts->get<void(System*)>("delete_" + String(names[i]));
+				World::register_system(ids[i], a, d);
 			}
 
 			_world = make_shared<World>();
-			_world->update();
-			_world->update();
 
 			for (int i = 0; i < count; i++) {
 				delete[] names[i];

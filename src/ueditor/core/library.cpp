@@ -1,28 +1,25 @@
-#include "library_loader.h"
-#include "library_loader.h"
+#include "library.h"
 
 #include <Windows.h>
 
 namespace ueditor {
-	library_loader::library_loader() : _handle(nullptr) {}
-
-	library_loader::~library_loader() {
-		close();
-	}
-
-	void library_loader::open(const String& path) {
+	Library::Library(const String& path) {
 		_handle = LoadLibrary(path.data());
 		UENGINE_ASSERT(_handle, "Failed to load library.");
 	}
 
-	void library_loader::close() {
+	Library::~Library() {
+		close();
+	}
+
+	void Library::close() {
 		if (_handle) {
 			BOOL result = FreeLibrary(static_cast<HMODULE>(_handle));
 			UENGINE_ASSERT(result, "Failed to close library.");
 		}
 	}
 
-	void* library_loader::get_proc_address(const String& name) const {
+	void* Library::get_proc_address(const String& name) const {
 		return GetProcAddress(static_cast<HMODULE>(_handle), name.data());
 	}
 }
