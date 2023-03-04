@@ -3,9 +3,11 @@
 
 #include "reflection.h"
 #include "ueditor/core/library.h"
+#include "ueditor/core/outline_window.h"
 #include "ueditor/core/output_window.h"
 #include "ueditor/core/viewport_window.h"
 
+#include <uengine/core/scene.h>
 #include <uengine/core/rendering/framebuffer.h>
 
 using namespace uengine;
@@ -16,6 +18,10 @@ namespace ueditor {
 		EditorApplication() {
 			EditorWindow::add<OutputWindow>();
 			EditorWindow::get<OutputWindow>()->open();
+
+			EditorWindow::add<OutlineWindow>();
+			EditorWindow::get<OutlineWindow>()->open();
+
 			EditorWindow::add<ViewportWindow>();
 			EditorWindow::get<ViewportWindow>()->open();
 			_framebuffer = make_shared<Framebuffer>();
@@ -25,14 +31,14 @@ namespace ueditor {
 		void on_start() override {
 			Window::instance()->vsync(true);
 			Log::info("Hello, UEngine!");
-			_world = make_shared<World>();
-			_camera = _world->create_entity();
-			auto& camera = _world->add_component<Camera>(_camera);
+			_scene = make_shared<Scene>();
+			_camera = _scene->world().create_entity();
+			auto& camera = _scene->world().add_component<Camera>(_camera);
 			camera.clear_color = {0.1f, 0.2f, 0.1f, 1.0f};
-			auto& transform = _world->add_component<Transform>(_camera);
+			auto& transform = _scene->world().add_component<Transform>(_camera);
 			transform.position = Float3::back() * 4.0f + Float3::up() * 1.0f;
-			_cube = _world->create_entity();
-			auto& render_mesh = _world->add_component<RenderMesh>(_cube);
+			_cube = _scene->world().create_entity();
+			auto& render_mesh = _scene->world().add_component<RenderMesh>(_cube);
 			auto mesh = make_shared<Mesh>();
 			struct Vertex {
 				Float3 position;
@@ -108,12 +114,17 @@ namespace ueditor {
 			material->set("u_Texture", texture);
 
 			render_mesh.materials = {material};
+
+			Scene::load(_scene);
 		}
 
 		void on_update() override {
-			// Drawing.
+			// Drawing loaded scenes.
 			_framebuffer->bind();
-			_world->update();
+			_scene->world().update();
+			for (auto& scene : Scene::loaded()) {
+				scene->world().update();
+			}
 			_framebuffer->unbind();
 
 			// Background.
@@ -205,6 +216,7 @@ namespace ueditor {
 		}
 	private:
 		String _project_path;
+		SharedPtr<Scene> _scene;
 		SharedPtr<World> _world;
 		SharedPtr<Framebuffer> _framebuffer;
 		Entity _camera;
