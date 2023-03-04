@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 project(UEditor VERSION 0.0.1 LANGUAGES CXX)
 
-file(GLOB_RECURSE UEDITOR_SOURCE_FILES "source/*.h" "source/*.cpp")
+file(GLOB_RECURSE UEDITOR_SOURCE_FILES "src/*.h" "src/*.cpp")
 
 add_executable(${PROJECT_NAME} ${UEDITOR_SOURCE_FILES})
 
@@ -14,8 +14,9 @@ add_subdirectory("external/uengine")
 
 target_link_libraries(${PROJECT_NAME} PRIVATE UEngine)
 
-target_include_directories(${PROJECT_NAME} PRIVATE "source")
+target_include_directories(${PROJECT_NAME} PRIVATE "src")
 
 include(GNUInstallDirs)
 install(TARGETS ${PROJECT_NAME} 
 	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY "assets/" DESTINATION "assets")

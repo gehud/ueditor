@@ -28,6 +28,10 @@ namespace ueditor {
 		void close() {
 			_is_opened = false;
 		}
+
+		Float2 size() const {
+			return _size;
+		}
 	protected:
 		virtual void on_imgui() {}
 	private:

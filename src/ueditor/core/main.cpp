@@ -4,8 +4,9 @@
 #include "reflection.h"
 #include "library_loader.h"
 #include "ueditor/core/output_window.h"
+#include "ueditor/core/viewport_window.h"
 
-#include <Windows.h>
+#include <uengine/core/rendering/framebuffer.h>
 
 using namespace uengine;
 
@@ -15,14 +16,107 @@ namespace ueditor {
 		EditorApplication() {
 			EditorWindow::add<OutputWindow>();
 			EditorWindow::get<OutputWindow>()->open();
+			EditorWindow::add<ViewportWindow>();
+			EditorWindow::get<ViewportWindow>()->open();
+			_framebuffer = make_shared<Framebuffer>();
+			EditorWindow::get<ViewportWindow>()->framebuffer(_framebuffer);
 		}
 	protected:
 		void on_start() override {
 			Window::instance()->vsync(true);
 			Log::info("Hello, UEngine!");
+			_world = make_shared<World>();
+			_camera = _world->create_entity();
+			auto& camera = _world->add_component<Camera>(_camera);
+			camera.clear_color = {0.1f, 0.2f, 0.1f, 1.0f};
+			auto& transform = _world->add_component<Transform>(_camera);
+			transform.position = Float3::back() * 4.0f + Float3::up() * 1.0f;
+			_cube = _world->create_entity();
+			auto& render_mesh = _world->add_component<RenderMesh>(_cube);
+			auto mesh = make_shared<Mesh>();
+			struct Vertex {
+				Float3 position;
+				Float3 normal;
+				Float2 uv;
+			};
+			Vertex vertices[] = {
+				// Back
+				{{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f}},
+				{{-0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f}},
+				{{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {1.0f, 1.0f}},
+				{{ 0.5f, -0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {1.0f, 0.0f}},
+
+				// Front
+				{{ 0.5f, -0.5f,  0.5f}, {0.0f, 0.0f,  1.0f}, {0.0f, 0.0f}},
+				{{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f,  1.0f}, {0.0f, 1.0f}},
+				{{-0.5f,  0.5f,  0.5f}, {0.0f, 0.0f,  1.0f}, {1.0f, 1.0f}},
+				{{-0.5f, -0.5f,  0.5f}, {0.0f, 0.0f,  1.0f}, {1.0f, 0.0f}},
+
+				// Right
+				{{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+				{{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+				{{ 0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
+				{{ 0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+
+				// Left
+				{{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+				{{-0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+				{{-0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
+				{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+
+				// Top
+				{{-0.5f,  0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+				{{-0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}},
+				{{ 0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
+				{{ 0.5f,  0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+
+				// Top
+				{{ 0.5f, -0.5f, -0.5f}, {1.0f, -1.0f, 0.0f}, {0.0f, 0.0f}},
+				{{ 0.5f, -0.5f,  0.5f}, {1.0f, -1.0f, 0.0f}, {0.0f, 1.0f}},
+				{{-0.5f, -0.5f,  0.5f}, {1.0f, -1.0f, 0.0f}, {1.0f, 1.0f}},
+				{{-0.5f, -0.5f, -0.5f}, {1.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
+			};
+
+			mesh->vertex_buffer_params(24, {
+				{VertexAttributeFormat::Single, 3},
+				{VertexAttributeFormat::Single, 3},
+				{VertexAttributeFormat::Single, 2}
+			});
+			mesh->vertex_buffer_data(vertices);
+
+			int indices[] = {
+				0, 1, 2, 0, 2, 3,
+				4, 5, 6, 4, 6, 7,
+				8, 9, 10, 8, 10, 11,
+				12, 13, 14, 12, 14, 15,
+				16, 17, 18, 16, 18, 19,
+				20, 21, 22, 20, 22, 23
+			};
+
+			mesh->index_buffer_params(36);
+			mesh->index_buffer_data(indices);
+
+			mesh->sub_mesh_count(1);
+			mesh->sub_mesh(0, {0, 36});
+
+			render_mesh.mesh = mesh;
+
+			auto shader = make_shared<Shader>("../assets/shaders/texture.glsl");
+			auto material = make_shared<Material>(shader);
+			auto texture = make_shared<Texture2D>("../assets/textures/checkerboard.png");
+			texture->filter_mode(Texture::FilterMode::Nearest);
+			material->set("u_Texture", texture);
+
+			render_mesh.materials = {material};
 		}
 
 		void on_update() override {
+			// Drawing.
+			_framebuffer->bind();
+			_world->update();
+			_framebuffer->unbind();
+
+			// Background.
 			Graphics::clear_color(0.1f, 0.1f, 0.1f, 1.0f);
 			Graphics::clear(ClearFlags::Color);
 		}
@@ -89,15 +183,17 @@ namespace ueditor {
 					ImGui::DockBuilderAddNode(dockspace_id, dockspace_flags | ImGuiDockNodeFlags_DockSpace);
 					ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
 
-					auto dock_id_scene = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.25f, nullptr, &dockspace_id);
-					auto dock_id_properties = ImGui::DockBuilderSplitNode(dock_id_scene, ImGuiDir_Down, 0.5f, nullptr, &dock_id_scene);
-					auto dock_id_output = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.35f, nullptr, &dockspace_id);
+					ImGuiID dock_id_center = 0;
+					auto dock_id_outline = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.15f, nullptr, &dockspace_id);
+					auto dock_id_properties = ImGui::DockBuilderSplitNode(dock_id_outline, ImGuiDir_Down, 0.5f, nullptr, &dock_id_outline);
+					auto dock_id_output = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.2f, nullptr, &dock_id_center);
 					auto dock_id_explorer = ImGui::DockBuilderSplitNode(dock_id_output, ImGuiDir_Right, 0.5f, nullptr, &dock_id_output);
 
-					ImGui::DockBuilderDockWindow("Scene", dock_id_scene);
-					ImGui::DockBuilderDockWindow("Properties", dock_id_properties);
 					ImGui::DockBuilderDockWindow("Explorer", dock_id_explorer);
+					ImGui::DockBuilderDockWindow("Outline", dock_id_outline);
 					ImGui::DockBuilderDockWindow("Output", dock_id_output);
+					ImGui::DockBuilderDockWindow("Properties", dock_id_properties);
+					ImGui::DockBuilderDockWindow("Viewport", dock_id_center);
 
 					ImGui::DockBuilderFinish(dockspace_id);
 				}
@@ -110,6 +206,9 @@ namespace ueditor {
 	private:
 		String _project_path;
 		SharedPtr<World> _world;
+		SharedPtr<Framebuffer> _framebuffer;
+		Entity _camera;
+		Entity _cube;
 
 		void open_project(const String& path) {
 			_project_path = path;
