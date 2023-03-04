@@ -3,17 +3,28 @@
 
 #include "reflection.h"
 #include "library_loader.h"
+#include "ueditor/core/output_window.h"
 
 #include <Windows.h>
 
 using namespace uengine;
 
 namespace ueditor {
-	class editor_application : public application {
+	class EditorApplication : public Application {
+	public:
+		EditorApplication() {
+			EditorWindow::add<OutputWindow>();
+			EditorWindow::get<OutputWindow>()->open();
+		}
 	protected:
+		void on_start() override {
+			Window::instance()->vsync(true);
+			Log::info("Hello, UEngine!");
+		}
+
 		void on_update() override {
-			graphics::clear_color(0.1f, 0.1f, 0.1f, 1.0f);
-			graphics::clear(clear_flags::color);
+			Graphics::clear_color(0.1f, 0.1f, 0.1f, 1.0f);
+			Graphics::clear(ClearFlags::Color);
 		}
 
 		void on_imgui() override {
@@ -21,7 +32,7 @@ namespace ueditor {
 
 			ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
 
-			ImGui::SetCurrentContext(imgui::get_context());
+			ImGui::SetCurrentContext(IMGUI::context());
 
 			ImGuiViewport* viewport = ImGui::GetMainViewport();
 			ImGui::SetNextWindowPos(viewport->Pos);
@@ -47,13 +58,18 @@ namespace ueditor {
 					}
 
 					if (ImGui::MenuItem("Open Project", "Ctrl+P Ctrl+O")) {
-						open_project(file_dialog::open_folder());
+						open_project(FileDialog::open_folder());
 					}
 
 					ImGui::EndMenu();
 				}
 
 				if (ImGui::BeginMenu("Window")) {
+					for (auto& pair : EditorWindow::windows()) {
+						if (ImGui::MenuItem(pair.value->name().data())) {
+							pair.value->open();
+						}
+					}
 					ImGui::EndMenu();
 				}
 
@@ -88,25 +104,32 @@ namespace ueditor {
 			}
 
 			ImGui::End();
+
+			EditorWindow::update();
 		}
 	private:
-		string _project_path;
-		shared_ptr<world> _world;
+		String _project_path;
+		SharedPtr<World> _world;
 
-		void open_project(const string& path) {
+		void open_project(const String& path) {
 			_project_path = path;
 			compile_project();
 		}
 
 		void compile_project() {
+			if (_project_path.is_empty()) {
+				Log::trace("Nothing to compile.");
+				return;
+			}
+
 			auto data_path = _project_path + "/.uengine";
 			/*if (!directory::exists(data_path)) {
 				auto result = directory::create(data_path);
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
-			file_stream fs(data_path + "/CMakeLists.txt", stream_mode::out);
+			FileStream fs(data_path + "/CMakeLists.txt", StreamMode::out);
 			UENGINE_ASSERT(fs, "Failed to create CMakeLists.txt.");
-			auto install_prefix = (path::current() + "/..").as_string().replace('\\', '/');
+			auto install_prefix = (Path::current() + "/..").as_string().replace('\\', '/');
 			fs << "cmake_minimum_required(VERSION 3.10)\n";
 			fs << "set(CMAKE_CXX_STANDARD 23)\n";
 			fs << "set(CMAKE_CXX_STANDARD_REQUIRED TRUE)\n";
@@ -140,7 +163,7 @@ namespace ueditor {
 
 			auto assembly = reflection::reflect(_project_path + "/source");
 
-			file_stream glue_h_stream(src_path + "/glue.h", stream_mode::out);
+			FileStream glue_h_stream(src_path + "/glue.h", StreamMode::out);
 			glue_h_stream << "#pragma once\n";
 			glue_h_stream << "#include <uengine.h>\n";
 			glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API int get_system_count();\n";
@@ -150,10 +173,10 @@ namespace ueditor {
 			}
 			glue_h_stream.close();
 
-			file_stream glue_cpp_stream(src_path + "/glue.cpp", stream_mode::out);
+			FileStream glue_cpp_stream(src_path + "/glue.cpp", StreamMode::out);
 			glue_cpp_stream << "#include \"glue.h\"\n";
 			for (auto& type : assembly.get_types()) {
-				glue_cpp_stream << "#include \"" << path::relative(type.get_path(), _project_path + "/source").as_string().get_data() << "\"\n";
+				glue_cpp_stream << "#include \"" << Path::relative(type.get_path(), _project_path + "/source").as_string().get_data() << "\"\n";
 				glue_cpp_stream << "uengine::system* allocate_" << type.get_name() << "() {\n";
 				glue_cpp_stream << "	return new " << type.get_name() << "();\n";
 				glue_cpp_stream << "}\n";
@@ -185,15 +208,13 @@ namespace ueditor {
 			for (int i = 0; i < count; i++) {
 				UENGINE_LOG_INFO(ids[i]);
 				UENGINE_LOG_INFO(names[i]);
-				auto a = ll.get<uengine::system*()>("allocate_" + string(names[i]));
-				world::register_system(ids[i], a);
+				auto a = ll.get<System*()>("allocate_" + String(names[i]));
+				World::register_system(ids[i], a);
 			}
 
-			_world = make_shared<world>();
+			_world = make_shared<World>();
 			_world->update();
 			_world->update();
-
-
 
 			for (int i = 0; i < count; i++) {
 				delete[] names[i];
@@ -205,7 +226,7 @@ namespace ueditor {
 }
 
 namespace uengine {
-	application* create_application() {
-		return new ueditor::editor_application();
+	Application* create_application() {
+		return new ueditor::EditorApplication();
 	}
 }

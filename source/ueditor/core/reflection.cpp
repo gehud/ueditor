@@ -4,8 +4,8 @@
 #include <filesystem>
 
 namespace ueditor {
-	void reflection::reflect_header(assembly& assembly, const path& path) {
-		std::ifstream ifstream(path.as_string().get_data());
+	void reflection::reflect_header(assembly& assembly, const Path& path) {
+		std::ifstream ifstream(path.as_string().data());
 		std::stringstream buffer;
 		buffer << ifstream.rdbuf();
 		std::string text = buffer.str();
@@ -19,17 +19,17 @@ namespace ueditor {
 		}
 	}
 
-	void reflection::reflect_recurse(assembly& assembly, const path& path) {
-		for (auto& i : std::filesystem::directory_iterator(path.as_string().get_data())) {
+	void reflection::reflect_recurse(assembly& assembly, const Path& path) {
+		for (auto& i : std::filesystem::directory_iterator(path.as_string().data())) {
 			if (std::filesystem::is_directory(i)) {
-				reflect_recurse(assembly, uengine::path(uengine::string(i.path().string())));
+				reflect_recurse(assembly, uengine::Path(String(i.path().string())));
 			} else if (i.path().extension() == ".h") {
-				reflect_header(assembly, uengine::path(uengine::string(i.path().string())));
+				reflect_header(assembly, uengine::Path(String(i.path().string())));
 			}
 		}
 	}
 
-	assembly reflection::reflect(const path& directory) {
+	assembly reflection::reflect(const Path& directory) {
 		assembly result;
 		reflect_recurse(result, directory);
 		return result;

@@ -11,17 +11,17 @@ namespace ueditor {
 
 		~library_loader();
 
-		void open(const string& path);
+		void open(const String& path);
 
 		void close();
 
 		template<typename Invocable>
-		Invocable* get(const string& name) const {
+		Invocable* get(const String& name) const {
 			return reinterpret_cast<Invocable*>(get_proc_address(name));
 		}
 	private:
 		void* _handle;
 
-		void* get_proc_address(const string& name) const;
+		void* get_proc_address(const String& name) const;
 	};
 }

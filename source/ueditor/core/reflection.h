@@ -7,11 +7,11 @@ using namespace uengine;
 namespace ueditor {
 	class type {
 	public:
-		const path& get_path() const {
+		const Path& get_path() const {
 			return _path;
 		}
 
-		const string& get_name() const {
+		const String& get_name() const {
 			return _name;
 		}
 
@@ -19,13 +19,13 @@ namespace ueditor {
 			return _base;
 		}
 	private:
-		path _path;
-		string _name;
+		Path _path;
+		String _name;
 		type* _base;
 
 		type() : _base(nullptr) {}
 
-		type(const path& path, const string& name, type* base) 
+		type(const Path& path, const String& name, type* base) 
 			: _path(path), _name(name), _base(base) {}
 
 		friend class reflection;
@@ -33,11 +33,11 @@ namespace ueditor {
 
 	class assembly {
 	public:
-		const list<type> get_types() {
+		const List<type> get_types() {
 			return _types;
 		}
 	private:
-		list<type> _types;
+		List<type> _types;
 
 		assembly() = default;
 
@@ -46,10 +46,10 @@ namespace ueditor {
 
 	class reflection {
 	public:
-		static assembly reflect(const path& directory);
+		static assembly reflect(const Path& directory);
 	private:
-		static void reflect_recurse(assembly& assembly, const path& path);
+		static void reflect_recurse(assembly& assembly, const Path& path);
 
-		static void reflect_header(assembly& assembly, const path& path);
+		static void reflect_header(assembly& assembly, const Path& path);
 	};
 }

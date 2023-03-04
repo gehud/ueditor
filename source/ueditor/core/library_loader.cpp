@@ -10,8 +10,8 @@ namespace ueditor {
 		close();
 	}
 
-	void library_loader::open(const string& path) {
-		_handle = LoadLibrary(path.get_data());
+	void library_loader::open(const String& path) {
+		_handle = LoadLibrary(path.data());
 		UENGINE_ASSERT(_handle, "Failed to load library.");
 	}
 
@@ -22,7 +22,7 @@ namespace ueditor {
 		}
 	}
 
-	void* library_loader::get_proc_address(const string& name) const {
-		return GetProcAddress(static_cast<HMODULE>(_handle), name.get_data());
+	void* library_loader::get_proc_address(const String& name) const {
+		return GetProcAddress(static_cast<HMODULE>(_handle), name.data());
 	}
 }
