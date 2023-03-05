@@ -23,6 +23,8 @@ namespace ueditor {
 		};
 
 		static Selection _selection;
+
+		friend class PropertiesWindow;
 	};
 }
 

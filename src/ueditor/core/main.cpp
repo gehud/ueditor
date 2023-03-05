@@ -5,6 +5,7 @@
 #include "ueditor/core/library.h"
 #include "ueditor/core/outline_window.h"
 #include "ueditor/core/output_window.h"
+#include "ueditor/core/properties_window.h"
 #include "ueditor/core/viewport_window.h"
 
 #include <uengine/core/scene.h>
@@ -21,6 +22,9 @@ namespace ueditor {
 
 			EditorWindow::add<OutlineWindow>();
 			EditorWindow::get<OutlineWindow>()->open();
+
+			EditorWindow::add<PropertiesWindow>();
+			EditorWindow::get<PropertiesWindow>()->open();
 
 			EditorWindow::add<ViewportWindow>();
 			EditorWindow::get<ViewportWindow>()->open();
@@ -195,9 +199,9 @@ namespace ueditor {
 					ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
 
 					ImGuiID dock_id_center = 0;
-					auto dock_id_outline = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.15f, nullptr, &dockspace_id);
+					auto dock_id_outline = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.25f, nullptr, &dockspace_id);
 					auto dock_id_properties = ImGui::DockBuilderSplitNode(dock_id_outline, ImGuiDir_Down, 0.5f, nullptr, &dock_id_outline);
-					auto dock_id_output = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.2f, nullptr, &dock_id_center);
+					auto dock_id_output = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.25f, nullptr, &dock_id_center);
 					auto dock_id_explorer = ImGui::DockBuilderSplitNode(dock_id_output, ImGuiDir_Right, 0.5f, nullptr, &dock_id_output);
 
 					ImGui::DockBuilderDockWindow("Explorer", dock_id_explorer);

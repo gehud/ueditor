@@ -16,6 +16,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE UEngine)
 
 target_include_directories(${PROJECT_NAME} PRIVATE "src")
 
+target_compile_definitions(${PROJECT_NAME} 
+	PRIVATE 
+		UEDITOR
+)
+
 include(GNUInstallDirs)
 install(TARGETS ${PROJECT_NAME} 
 	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
