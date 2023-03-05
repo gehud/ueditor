@@ -12,7 +12,7 @@ namespace ueditor {
 		for (auto& scene : Scene::loaded()) {
 			if (ImGui::TreeNodeEx(scene->name().data(), ImGuiTreeNodeFlags_Selected)) {
 				auto& world = scene->world();
-				world.for_each([&](Entity entity) {
+				world.each([&](Entity entity) {
 					ImGuiTreeNodeFlags flags = 0;
 					if (_selection)
 						if (_selection.world == &world && _selection.entity == entity)

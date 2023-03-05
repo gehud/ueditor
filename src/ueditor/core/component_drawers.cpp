@@ -9,9 +9,9 @@ namespace ueditor {
 		auto& transform = target();
 
 		ImGui::DragFloat3("Position", &transform.position[0], 0.1f);
-		Float3 euler_angles = transform.rotation.euler_angles();
-		ImGui::DragFloat3("Rotation", &euler_angles[0], 0.1f);
-		transform.rotation = Float4::quaternion(euler_angles);
+		if (ImGui::DragFloat3("Rotation", &transform.euler_angles_hint[0], 0.1f)) {
+			transform.rotation = Float4::quaternion(transform.euler_angles_hint);
+		}
 		ImGui::DragFloat3("Scale", &transform.scale[0], 0.1f);
 	}
 

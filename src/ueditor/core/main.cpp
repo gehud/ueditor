@@ -7,6 +7,7 @@
 #include "ueditor/core/output_window.h"
 #include "ueditor/core/properties_window.h"
 #include "ueditor/core/viewport_window.h"
+#include "ueditor/core/scene_serializer.h"
 
 #include <uengine/core/scene.h>
 #include <uengine/core/rendering/framebuffer.h>
@@ -120,6 +121,8 @@ namespace ueditor {
 			render_mesh.materials = {material};
 
 			Scene::load(_scene);
+
+			Input::on_key_pressed += UENGINE_BIND_METHOD_PTR(Input::KeyPressedEvent, this, &EditorApplication::on_key_pressed);
 		}
 
 		void on_update() override {
@@ -163,11 +166,15 @@ namespace ueditor {
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("File")) {
 					if (ImGui::MenuItem("Save", "Ctrl+S")) {
-						// Save
+						save_file();
+					}
+
+					if (ImGui::MenuItem("Open", "Ctrl+O")) {
+						open_file();
 					}
 
 					if (ImGui::MenuItem("Open Project", "Ctrl+P Ctrl+O")) {
-						open_project(FileDialog::open_folder());
+						open_project();
 					}
 
 					ImGui::EndMenu();
@@ -227,14 +234,50 @@ namespace ueditor {
 		Entity _cube;
 		SharedPtr<Library> _scripts;
 
-		void open_project(const String& path) {
-			_project_path = path;
+		void on_key_pressed(int key, int repreat_count) {
+			bool control = Input::is_key(UENGINE_KEY_LEFT_CONTROL);
+			switch (key) {
+			case UENGINE_KEY_S:
+				if (control) {
+					save_file();
+				}
+				break;
+			case UENGINE_KEY_O:
+				if (control) {
+					open_file();
+				}
+				break;
+			}
+		}
+
+		void save_file() {
+			auto destination = FileDialog::save_file("UEngine Scene (*.uengine)\0*.uengine\0");
+			if (destination.is_empty()) {
+				Log::error("Wrong path.");
+				return;
+			}
+			SceneSerializer ss(_scene);
+			ss.serialize(destination);
+		}
+
+		void open_file() {
+			auto source = FileDialog::open_file("UEngine Scene (*.uengine)\0*.uengine\0");
+			if (source.is_empty()) {
+				Log::error("Wrong path.");
+				return;
+			}
+			SceneSerializer ss(_scene);
+			ss.deserialize(source);
+		}
+
+		void open_project() {
+			_project_path = FileDialog::open_folder();
 			compile_project();
 		}
 
 		void compile_project() {
 			if (_project_path.is_empty()) {
-				Log::trace("Nothing to compile.");
+				Log::error("Wrong path.");
 				return;
 			}
 
@@ -243,7 +286,7 @@ namespace ueditor {
 				auto result = Directory::create(data_path);
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
-			FileStream fs(data_path + "/CMakeLists.txt", StreamMode::Out);
+			FileStream fs(data_path + "/CMakeLists.txt", OpenMode::Out);
 			UENGINE_ASSERT(fs, "Failed to create CMakeLists.txt.");
 			auto install_prefix = (Path::current() + "/..").as_string().replace('\\', '/');
 			fs << "cmake_minimum_required(VERSION 3.10)\n";
@@ -277,35 +320,35 @@ namespace ueditor {
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
 
-			auto assembly = reflection::reflect(_project_path + "/src");
+			auto assembly = Reflection::reflect(_project_path + "/src");
 
-			FileStream glue_h_stream(src_path + "/glue.h", StreamMode::Out);
+			FileStream glue_h_stream(src_path + "/glue.h", OpenMode::Out);
 			glue_h_stream << "#pragma once\n";
 			glue_h_stream << "#include <uengine/core/system.h>\n";
 			glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API int get_system_count();\n";
 			glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API void get_systems(char** names, int* ids);\n";
-			for (auto& type : assembly.get_types()) {
-				glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API uengine::System* allocate_" << type.get_name() << "();\n";
-				glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API void delete_" << type.get_name() << "(uengine::System*);\n";
+			for (auto& type : assembly.types()) {
+				glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API uengine::System* allocate_" << type.name() << "();\n";
+				glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API void delete_" << type.name() << "(uengine::System*);\n";
 			}
 			glue_h_stream.close();
 
-			FileStream glue_cpp_stream(src_path + "/glue.cpp", StreamMode::Out);
+			FileStream glue_cpp_stream(src_path + "/glue.cpp", OpenMode::Out);
 			glue_cpp_stream << "#include \"glue.h\"\n";
-			for (auto& type : assembly.get_types()) {
-				glue_cpp_stream << "#include \"" << Path::relative(type.get_path(), _project_path + "/source").as_string().data() << "\"\n";
-				glue_cpp_stream << "uengine::System* allocate_" << type.get_name() << "() {\n";
-				glue_cpp_stream << "	return new " << type.get_name() << "();\n";
+			for (auto& type : assembly.types()) {
+				glue_cpp_stream << "#include \"" << Path::relative(type.path(), _project_path + "/source").as_string().data() << "\"\n";
+				glue_cpp_stream << "uengine::System* allocate_" << type.name() << "() {\n";
+				glue_cpp_stream << "	return new " << type.name() << "();\n";
 				glue_cpp_stream << "}\n";
-				glue_cpp_stream << "void delete_" << type.get_name() << "(uengine::System* ptr) {\n";
-				glue_cpp_stream << "	delete static_cast<" << type.get_name() << "*>(ptr);\n";
+				glue_cpp_stream << "void delete_" << type.name() << "(uengine::System* ptr) {\n";
+				glue_cpp_stream << "	delete static_cast<" << type.name() << "*>(ptr);\n";
 				glue_cpp_stream << "}\n";
 			}
-			glue_cpp_stream << "int get_system_count() { return " << assembly.get_types().count() << "; }\n";
+			glue_cpp_stream << "int get_system_count() { return " << assembly.types().count() << "; }\n";
 			glue_cpp_stream << "void get_systems(char** names, int* ids) {\n";
-			for (int i = 0; i < assembly.get_types().count(); i++) {
-				glue_cpp_stream << "	strcpy(names[" << i << "], \"" << assembly.get_types()[i].get_name() << "\");\n";
-				glue_cpp_stream << "	ids[" << i << "] = typeid(" << assembly.get_types()[i].get_name() << ").hash_code();\n";
+			for (int i = 0; i < assembly.types().count(); i++) {
+				glue_cpp_stream << "	strcpy(names[" << i << "], \"" << assembly.types()[i].name() << "\");\n";
+				glue_cpp_stream << "	ids[" << i << "] = typeid(" << assembly.types()[i].name() << ").hash_code();\n";
 			}
 			glue_cpp_stream << "}";
 			glue_cpp_stream.close();

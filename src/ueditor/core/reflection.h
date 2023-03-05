@@ -5,51 +5,51 @@
 using namespace uengine;
 
 namespace ueditor {
-	class type {
+	class Type {
 	public:
-		const Path& get_path() const {
+		const Path& path() const {
 			return _path;
 		}
 
-		const String& get_name() const {
+		const String& name() const {
 			return _name;
 		}
 
-		type* get_base() {
+		Type* base() {
 			return _base;
 		}
 	private:
 		Path _path;
 		String _name;
-		type* _base;
+		Type* _base;
 
-		type() : _base(nullptr) {}
+		Type() : _base(nullptr) {}
 
-		type(const Path& path, const String& name, type* base) 
+		Type(const Path& path, const String& name, Type* base) 
 			: _path(path), _name(name), _base(base) {}
 
-		friend class reflection;
+		friend class Reflection;
 	};
 
-	class assembly {
+	class Assembly {
 	public:
-		const List<type> get_types() {
+		const List<Type>& types() const {
 			return _types;
 		}
 	private:
-		List<type> _types;
+		List<Type> _types;
 
-		assembly() = default;
+		Assembly() = default;
 
-		friend class reflection;
+		friend class Reflection;
 	};
 
-	class reflection {
+	class Reflection {
 	public:
-		static assembly reflect(const Path& directory);
+		static Assembly reflect(const Path& directory);
 	private:
-		static void reflect_recurse(assembly& assembly, const Path& path);
+		static void reflect_recurse(Assembly& assembly, const Path& path);
 
-		static void reflect_header(assembly& assembly, const Path& path);
+		static void reflect_header(Assembly& assembly, const Path& path);
 	};
 }
