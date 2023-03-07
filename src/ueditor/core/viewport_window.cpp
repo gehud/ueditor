@@ -12,6 +12,9 @@ namespace ueditor {
 			_last_size = size();
 			_framebuffer->update(_last_size.x, _last_size.y);
 			Graphics::viewport(0, 0, _last_size.x, _last_size.y);
+			if (_last_size.x != 0 && _last_size.y != 0) {
+				Graphics::aspect(_last_size.x / (float)_last_size.y);
+			}
 		}
 
 		ImGui::Image((ImTextureID)_framebuffer->color_buffer(), ImGui::GetContentRegionAvail(), {0, 1}, {1, 0});

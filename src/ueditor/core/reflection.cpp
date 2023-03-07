@@ -5,7 +5,7 @@
 
 namespace ueditor {
 	void Reflection::reflect_header(Assembly& assembly, const Path& path) {
-		std::ifstream ifstream(path.as_string().data());
+		std::ifstream ifstream(path.string().data());
 		std::stringstream buffer;
 		buffer << ifstream.rdbuf();
 		std::string text = buffer.str();
@@ -20,7 +20,7 @@ namespace ueditor {
 	}
 
 	void Reflection::reflect_recurse(Assembly& assembly, const Path& path) {
-		for (auto& i : std::filesystem::directory_iterator(path.as_string().data())) {
+		for (auto& i : std::filesystem::directory_iterator(path.string().data())) {
 			if (std::filesystem::is_directory(i)) {
 				reflect_recurse(assembly, uengine::Path(String(i.path().string())));
 			} else if (i.path().extension() == ".h") {

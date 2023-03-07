@@ -17,6 +17,9 @@ namespace ueditor {
 			_framebuffer = framebuffer;
 			_framebuffer->update(_last_size.x, _last_size.y);
 			Graphics::viewport(0, 0, _last_size.x, _last_size.y);
+			if (_last_size.x != 0 && _last_size.y != 0) {
+				Graphics::aspect(_last_size.x / (float)_last_size.y);
+			}
 		}
 	protected:
 		void on_imgui() override;

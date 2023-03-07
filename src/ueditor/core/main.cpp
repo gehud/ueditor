@@ -1,16 +1,20 @@
 #include <uengine.h>
 #include <uengine/core/entry.h>
 
-#include "reflection.h"
+#include "ueditor/core/assets.h"
 #include "ueditor/core/library.h"
+#include "ueditor/core/reflection.h"
+#include "ueditor/core/explorer_window.h"
 #include "ueditor/core/outline_window.h"
 #include "ueditor/core/output_window.h"
 #include "ueditor/core/properties_window.h"
 #include "ueditor/core/viewport_window.h"
 #include "ueditor/core/scene_serializer.h"
+#include "ueditor/core/camera_controller.h"
 
 #include <uengine/core/scene.h>
 #include <uengine/core/rendering/framebuffer.h>
+#include <uengine/core/rendering/model.h>
 
 using namespace uengine;
 
@@ -18,6 +22,9 @@ namespace ueditor {
 	class EditorApplication : public Application {
 	public:
 		EditorApplication() {
+			EditorWindow::add<ExplorerWindow>();
+			EditorWindow::get<ExplorerWindow>()->open();
+
 			EditorWindow::add<OutputWindow>();
 			EditorWindow::get<OutputWindow>()->open();
 
@@ -36,82 +43,25 @@ namespace ueditor {
 		void on_start() override {
 			Window::instance()->vsync(true);
 			Log::info("Hello, UEngine!");
-			_scene = make_shared<Scene>();
-			_camera = _scene->world().create_entity();
-			auto& camera = _scene->world().add_component<Camera>(_camera);
+			auto scene = make_shared<Scene>();
+
+			// Editor camera
+			auto editor_camera_entity = scene->world().create_entity();
+			auto& editor_camera_transform = scene->world().add_component<Transform>(editor_camera_entity);
+			editor_camera_transform.position = {0.0f, 0.0f, -3.0f};
+			scene->world().add_component<CameraController>(editor_camera_entity);
+			auto& editor_camera = scene->world().add_component<Camera>(editor_camera_entity);
+			editor_camera.clear_color = {0.1f, 0.1f, 0.1f, 1.0f};
+			scene->world().create_system<CameraControllerSystem>();
+			auto camera_entity = scene->world().create_entity();
+			auto& camera = scene->world().add_component<Camera>(camera_entity);
 			camera.clear_color = {0.1f, 0.2f, 0.1f, 1.0f};
-			auto& transform = _scene->world().add_component<Transform>(_camera);
+			auto& transform = scene->world().add_component<Transform>(camera_entity);
 			transform.position = Float3::back() * 4.0f + Float3::up() * 1.0f;
-			_cube = _scene->world().create_entity();
-			auto& render_mesh = _scene->world().add_component<RenderMesh>(_cube);
-			auto mesh = make_shared<Mesh>();
-			struct Vertex {
-				Float3 position;
-				Float3 normal;
-				Float2 uv;
-			};
-			Vertex vertices[] = {
-				// Back
-				{{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f}},
-				{{-0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f}},
-				{{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {1.0f, 1.0f}},
-				{{ 0.5f, -0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {1.0f, 0.0f}},
-
-				// Front
-				{{ 0.5f, -0.5f,  0.5f}, {0.0f, 0.0f,  1.0f}, {0.0f, 0.0f}},
-				{{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f,  1.0f}, {0.0f, 1.0f}},
-				{{-0.5f,  0.5f,  0.5f}, {0.0f, 0.0f,  1.0f}, {1.0f, 1.0f}},
-				{{-0.5f, -0.5f,  0.5f}, {0.0f, 0.0f,  1.0f}, {1.0f, 0.0f}},
-
-				// Right
-				{{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-				{{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
-				{{ 0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
-				{{ 0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-
-				// Left
-				{{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-				{{-0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
-				{{-0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
-				{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-
-				// Top
-				{{-0.5f,  0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-				{{-0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}},
-				{{ 0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
-				{{ 0.5f,  0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-
-				// Top
-				{{ 0.5f, -0.5f, -0.5f}, {1.0f, -1.0f, 0.0f}, {0.0f, 0.0f}},
-				{{ 0.5f, -0.5f,  0.5f}, {1.0f, -1.0f, 0.0f}, {0.0f, 1.0f}},
-				{{-0.5f, -0.5f,  0.5f}, {1.0f, -1.0f, 0.0f}, {1.0f, 1.0f}},
-				{{-0.5f, -0.5f, -0.5f}, {1.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
-			};
-
-			mesh->vertex_buffer_params(24, {
-				{VertexAttributeFormat::Single, 3},
-				{VertexAttributeFormat::Single, 3},
-				{VertexAttributeFormat::Single, 2}
-			});
-			mesh->vertex_buffer_data(vertices);
-
-			int indices[] = {
-				0, 1, 2, 0, 2, 3,
-				4, 5, 6, 4, 6, 7,
-				8, 9, 10, 8, 10, 11,
-				12, 13, 14, 12, 14, 15,
-				16, 17, 18, 16, 18, 19,
-				20, 21, 22, 20, 22, 23
-			};
-
-			mesh->index_buffer_params(36);
-			mesh->index_buffer_data(indices);
-
-			mesh->sub_mesh_count(1);
-			mesh->sub_mesh(0, {0, 36});
-
-			render_mesh.mesh = mesh;
-
+			auto cube = scene->world().create_entity();
+			auto& render_mesh = scene->world().add_component<RenderMesh>(cube);
+			auto cube_model = make_shared<Model>("../assets/models/cube.fbx");
+			render_mesh.mesh = cube_model->meshes()[0];
 			auto shader = make_shared<Shader>("../assets/shaders/texture.glsl");
 			auto material = make_shared<Material>(shader);
 			auto texture = make_shared<Texture2D>("../assets/textures/checkerboard.png");
@@ -120,7 +70,7 @@ namespace ueditor {
 
 			render_mesh.materials = {material};
 
-			Scene::load(_scene);
+			Scene::load(scene);
 
 			Input::on_key_pressed += UENGINE_BIND_METHOD_PTR(Input::KeyPressedEvent, this, &EditorApplication::on_key_pressed);
 		}
@@ -128,10 +78,7 @@ namespace ueditor {
 		void on_update() override {
 			// Drawing loaded scenes.
 			_framebuffer->bind();
-			_scene->world().update();
-			for (auto& scene : Scene::loaded()) {
-				scene->world().update();
-			}
+			Scene::active()->world().update();
 			_framebuffer->unbind();
 
 			// Background.
@@ -173,7 +120,7 @@ namespace ueditor {
 						open_file();
 					}
 
-					if (ImGui::MenuItem("Open Project", "Ctrl+P Ctrl+O")) {
+					if (ImGui::MenuItem("Project", "Ctrl+P")) {
 						open_project();
 					}
 
@@ -192,6 +139,13 @@ namespace ueditor {
 				ImGui::EndMenuBar();
 			}
 
+			// Toolbar.
+			ImGui::SetCursorPos({ImGui::GetWindowSize().x / 2 - ImGui::CalcTextSize("Compile").x / 2,
+								 ImGui::GetCursorPos().y + ImGui::GetStyle().WindowPadding.y / 2});
+			if (ImGui::Button("Compile"))
+				compile_project();
+			ImGui::Separator();
+
 			ImGuiIO& io = ImGui::GetIO();
 			if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable) {
 				ImGuiID dockspace_id = ImGui::GetID("DockSpace");
@@ -208,7 +162,7 @@ namespace ueditor {
 					ImGuiID dock_id_center = 0;
 					auto dock_id_outline = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.25f, nullptr, &dockspace_id);
 					auto dock_id_properties = ImGui::DockBuilderSplitNode(dock_id_outline, ImGuiDir_Down, 0.5f, nullptr, &dock_id_outline);
-					auto dock_id_output = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.25f, nullptr, &dock_id_center);
+					auto dock_id_output = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.3f, nullptr, &dock_id_center);
 					auto dock_id_explorer = ImGui::DockBuilderSplitNode(dock_id_output, ImGuiDir_Right, 0.5f, nullptr, &dock_id_output);
 
 					ImGui::DockBuilderDockWindow("Explorer", dock_id_explorer);
@@ -227,11 +181,7 @@ namespace ueditor {
 		}
 	private:
 		String _project_path;
-		SharedPtr<Scene> _scene;
-		SharedPtr<World> _world;
 		SharedPtr<Framebuffer> _framebuffer;
-		Entity _camera;
-		Entity _cube;
 		SharedPtr<Library> _scripts;
 
 		void on_key_pressed(int key, int repreat_count) {
@@ -247,6 +197,11 @@ namespace ueditor {
 					open_file();
 				}
 				break;
+			case UENGINE_KEY_P:
+				if (control) {
+					open_project();
+				}
+				break;
 			}
 		}
 
@@ -256,7 +211,7 @@ namespace ueditor {
 				Log::error("Wrong path.");
 				return;
 			}
-			SceneSerializer ss(_scene);
+			SceneSerializer ss(Scene::active());
 			ss.serialize(destination);
 		}
 
@@ -266,17 +221,40 @@ namespace ueditor {
 				Log::error("Wrong path.");
 				return;
 			}
-			SceneSerializer ss(_scene);
+			auto scene = make_shared<Scene>();
+			SceneSerializer ss(scene); 
 			ss.deserialize(source);
+			Scene::load(scene);
 		}
 
 		void open_project() {
 			_project_path = FileDialog::open_folder();
-			compile_project();
+			if (_project_path.is_empty()) {
+				Log::error("Wrong path.");
+				return;
+			}
+
+			EditorWindow::get<ExplorerWindow>()->project_path(_project_path);
+			
+			auto assets_path = _project_path + "/assets";
+			if (Directory::exists(assets_path)) {
+				Assets::path(assets_path);
+				import_assets(assets_path);
+			}
+		}
+
+		void import_assets(const Path& path) {
+			Directory::for_each(path, [&](DirectoryEntry entry) {
+				if (entry.is_directory()) {
+					import_assets(entry.path());
+				} else if (entry.path().extension() == ".fbx") {
+					Assets::import(Path::relative(entry.path(), Assets::path()));
+				}
+			});
 		}
 
 		void compile_project() {
-			if (_project_path.is_empty()) {
+			if (_project_path.is_empty() || !Directory::exists(_project_path + "/assets")) {
 				Log::error("Wrong path.");
 				return;
 			}
@@ -288,17 +266,17 @@ namespace ueditor {
 			}
 			FileStream fs(data_path + "/CMakeLists.txt", OpenMode::Out);
 			UENGINE_ASSERT(fs, "Failed to create CMakeLists.txt.");
-			auto install_prefix = (Path::current() + "/..").as_string().replace('\\', '/');
+			auto install_prefix = (Path::current() + "/..").string().replace('\\', '/');
 			fs << "cmake_minimum_required(VERSION 3.10)\n";
 			fs << "set(CMAKE_CXX_STANDARD 23)\n";
 			fs << "set(CMAKE_CXX_STANDARD_REQUIRED TRUE)\n";
 			fs << "project(Example)\n";
-			fs << "file(GLOB_RECURSE EXAMPLE_SOURCE_FILES \"../src/*.h\" \"../src/*.cpp\" \"src/*.h\" \"src/*.cpp\")\n";
+			fs << "file(GLOB_RECURSE EXAMPLE_SOURCE_FILES \"../assets/*.h\" \"../assets/*.cpp\" \"src/*.h\" \"src/*.cpp\")\n";
 			fs << "add_library(${PROJECT_NAME} SHARED ${EXAMPLE_SOURCE_FILES})\n";
-			fs << "target_include_directories(${PROJECT_NAME} PUBLIC \"../source\" \"source\" \"" << install_prefix + "/include" << "\")\n";
+			fs << "target_include_directories(${PROJECT_NAME} PUBLIC \"../assets\" \"../assets/scripts\" \"src\" \"" << install_prefix + "/include" << "\")\n";
 			fs << "target_link_directories(${PROJECT_NAME} PRIVATE \"" << install_prefix + "/lib" << "\" \"" << install_prefix + "/bin" << "\")\n";
 			fs << "target_link_libraries(${PROJECT_NAME} PRIVATE uengine)\n";
-			fs << "target_compile_definitions(${PROJECT_NAME} PRIVATE \"UENGINE_SCRIPT_API=__declspec(dllexport)\" INTERFACE \"UENGINE_SCRIPT_API=__declspec(dllimport)\")\n";
+			fs << "target_compile_definitions(${PROJECT_NAME} PRIVATE \"UEDITOR\" \"UENGINE_SCRIPT_API=__declspec(dllexport)\" INTERFACE \"UENGINE_SCRIPT_API=__declspec(dllimport)\")\n";
 			fs << "set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME \"example\")\n";
 			fs << "install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})";
 			fs.close();
@@ -320,7 +298,7 @@ namespace ueditor {
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
 
-			auto assembly = Reflection::reflect(_project_path + "/src");
+			auto assembly = Reflection::reflect(_project_path + "/assets");
 
 			FileStream glue_h_stream(src_path + "/glue.h", OpenMode::Out);
 			glue_h_stream << "#pragma once\n";
@@ -336,7 +314,7 @@ namespace ueditor {
 			FileStream glue_cpp_stream(src_path + "/glue.cpp", OpenMode::Out);
 			glue_cpp_stream << "#include \"glue.h\"\n";
 			for (auto& type : assembly.types()) {
-				glue_cpp_stream << "#include \"" << Path::relative(type.path(), _project_path + "/source").as_string().data() << "\"\n";
+				glue_cpp_stream << "#include \"" << Path::relative(type.path(), _project_path + "/source").string().data() << "\"\n";
 				glue_cpp_stream << "uengine::System* allocate_" << type.name() << "() {\n";
 				glue_cpp_stream << "	return new " << type.name() << "();\n";
 				glue_cpp_stream << "}\n";
@@ -372,8 +350,6 @@ namespace ueditor {
 				auto d = _scripts->get<void(System*)>("delete_" + String(names[i]));
 				World::register_system(ids[i], a, d);
 			}
-
-			_world = make_shared<World>();
 
 			for (int i = 0; i < count; i++) {
 				delete[] names[i];

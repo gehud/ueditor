@@ -20,6 +20,8 @@ namespace ueditor {
 	void CameraComponentDrawer::on_imgui() {
 		auto& camera = target();
 
+		ImGui::Checkbox("Is Base", &camera.is_base);
+
 		const char* projection_enum_strings[] = {
 			"Perspective",
 			"Othographics"
@@ -44,14 +46,11 @@ namespace ueditor {
 		}
 
 		if (camera.projection == Camera::Projection::Perspective) {
-			float deg = Math::degrees(camera.fov);
-			ImGui::DragFloat("FOV", &deg, 0.1f);
-			camera.fov = Math::radians(deg);
+			ImGui::DragFloat("FOV", &camera.fov, 0.1f);
 		} else {
 			ImGui::DragFloat("Size", &camera.size, 0.1f);
 		}
 
-		ImGui::DragFloat("Aspect", &camera.aspect, 0.1f);
 		ImGui::ColorEdit4("Clear Color", &camera.clear_color[0]);
 	}
 }

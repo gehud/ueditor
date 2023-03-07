@@ -1,6 +1,7 @@
 #include "ueditor/core/scene_serializer.h"
 
 #include <uengine/core/transform.h>
+#include <uengine/core/uuid.h>
 #include <uengine/core/rendering/camera.h>
 #include <uengine/core/io/file.h>
 
@@ -78,7 +79,7 @@ namespace ueditor {
 
 	static void serialize_entity(YAML::Emitter& out, World& world, Entity entity) {
 		out << YAML::BeginMap;
-		out << YAML::Key << "Entity" << YAML::Value << entity.index();
+		out << YAML::Key << "Entity" << YAML::Value << UUID();
 
 		if (world.has_component<Transform>(entity)) {
 			auto& transform = world.get_component<Transform>(entity);
@@ -99,6 +100,14 @@ namespace ueditor {
 			out << YAML::Key << "NearPlane" << YAML::Value << camera.near_plane;
 			out << YAML::Key << "FarPlane" << YAML::Value << camera.far_plane;
 			out << YAML::Key << "ClearColor" << YAML::Value << camera.clear_color;
+			out << YAML::Key << "IsBase" << YAML::Value << camera.is_base;
+			out << YAML::EndMap;
+		}
+
+		if (world.has_component<RenderMesh>(entity)) {
+			auto& render_mesh = world.get_component<RenderMesh>(entity);
+			out << YAML::Key << "RenderMesh" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "Mesh" << YAML::Value << UUID();
 			out << YAML::EndMap;
 		}
 
@@ -130,15 +139,13 @@ namespace ueditor {
 			return;
 
 		String scene_name = data["Scene"].as<std::string>();
-		Log::info("Deserializing scene: {0}", scene_name);
+		_scene->name(scene_name);
 
 		auto entities = data["Entities"];
 		if (!entities)
 			return;
 
 		auto& world = _scene->world();
-
-		world.clear();
 
 		for (auto entity_data : entities) {
 			auto entity = world.create_entity();
@@ -161,6 +168,7 @@ namespace ueditor {
 				camera.near_plane = camera_data["NearPlane"].as<float>();
 				camera.far_plane = camera_data["FarPlane"].as<float>();
 				camera.clear_color = camera_data["ClearColor"].as<Float4>();
+				camera.is_base = camera_data["IsBase"].as<bool>();
 			}
 		}
 	}

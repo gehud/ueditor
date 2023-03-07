@@ -9,6 +9,7 @@ file(GLOB_RECURSE UEDITOR_SOURCE_FILES "src/*.h" "src/*.cpp")
 
 add_executable(${PROJECT_NAME} ${UEDITOR_SOURCE_FILES})
 
+set(UENGINE_UEDITOR_PROFILE ON CACHE BOOL "" FORCE)
 set(UENGINE_BUILD_TESTS ON CACHE BOOL "" FORCE)
 add_subdirectory("external/uengine")
 
