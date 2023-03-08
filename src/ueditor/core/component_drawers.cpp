@@ -1,6 +1,12 @@
 #include "ueditor/core/component_drawers.h"
 
+#include "ueditor/core/assets.h"
+
+#include <uengine/core/io/file.h>
+#include <uengine/core/io/directory.h>
 #include <uengine/core/ui/imgui.h>
+
+#include <yaml-cpp/yaml.h>
 
 namespace ueditor {
 	TransformComponentDrawer::TransformComponentDrawer() : ComponentDrawer("Transform") {}
@@ -52,5 +58,37 @@ namespace ueditor {
 		}
 
 		ImGui::ColorEdit4("Clear Color", &camera.clear_color[0]);
+	}
+
+	RenderMeshComponentDrawer::RenderMeshComponentDrawer() : ComponentDrawer("Render Mesh") {}
+
+	void RenderMeshComponentDrawer::on_imgui() {
+		auto& render_mesh = target();
+
+		ImVec2 label_size = ImGui::CalcTextSize("Mesh");
+		ImGui::Text("Mesh");
+		ImGui::SameLine();
+		ImGuiID id = ImGui::GetID("ObjectField");
+		ImVec2 cursor_position = ImGui::GetCursorScreenPos();
+		ImRect rect = {cursor_position, 
+		{
+			cursor_position.x + ImGui::GetContentRegionAvail().x, 
+			cursor_position.y + label_size.y
+		}};
+		ImGui::GetWindowDrawList()->AddRectFilled(
+			rect.Min,
+			rect.Max,
+			ImGui::GetColorU32({0.09f, 0.09f, 0.09f, 1.0f}));
+
+		if (ImGui::BeginDragDropTargetCustom(rect, id)) {
+			auto payload = ImGui::AcceptDragDropPayload("EXPLORER_ITEM");
+			if (payload) {
+				Path path((const char*)payload->Data);
+				if (path.extension() == ".mesh") {
+					render_mesh.mesh = Assets::load<Mesh>(path);
+				}
+			}
+			ImGui::EndDragDropTarget();
+		}
 	}
 }

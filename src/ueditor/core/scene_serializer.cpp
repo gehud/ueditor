@@ -1,5 +1,7 @@
 #include "ueditor/core/scene_serializer.h"
 
+#include "ueditor/core/assets.h"
+
 #include <uengine/core/transform.h>
 #include <uengine/core/uuid.h>
 #include <uengine/core/rendering/camera.h>
@@ -107,7 +109,9 @@ namespace ueditor {
 		if (world.has_component<RenderMesh>(entity)) {
 			auto& render_mesh = world.get_component<RenderMesh>(entity);
 			out << YAML::Key << "RenderMesh" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "Mesh" << YAML::Value << UUID();
+			if (render_mesh.mesh) {
+				out << YAML::Key << "Mesh" << YAML::Value << Assets::uuid(render_mesh.mesh);
+			}
 			out << YAML::EndMap;
 		}
 
@@ -127,14 +131,14 @@ namespace ueditor {
 		});
 		out << YAML::EndSeq;
 		out << YAML::EndMap;
-		FileStream fs(path, OpenMode::Out);
-		fs << out.c_str();
+		File file(path, OpenMode::Out);
+		file << out.c_str();
 	}
 
 	void SceneSerializer::deserialize(const Path& path) {
-		FileStream fs(path, OpenMode::In);
+		File file(path, OpenMode::In);
 	
-		YAML::Node data = YAML::Load(fs.string().data());
+		YAML::Node data = YAML::Load(file.string().data());
 		if (!data["Scene"])
 			return;
 
@@ -169,6 +173,22 @@ namespace ueditor {
 				camera.far_plane = camera_data["FarPlane"].as<float>();
 				camera.clear_color = camera_data["ClearColor"].as<Float4>();
 				camera.is_base = camera_data["IsBase"].as<bool>();
+			}
+
+			if (entity_data["RenderMesh"]) {
+				auto render_mesh_data = entity_data["RenderMesh"];
+				auto& render_mesh = world.add_component<RenderMesh>(entity);
+				if (render_mesh_data["Mesh"]) {
+					render_mesh.mesh = Assets::load<Mesh>(render_mesh_data["Mesh"].as<ULong>());
+
+					// Temp.
+					auto shader = make_shared<Shader>("../assets/shaders/texture.glsl");
+					auto material = make_shared<Material>(shader);
+					auto texture = make_shared<Texture2D>("../assets/textures/checkerboard.png");
+					texture->filter_mode(Texture::FilterMode::Nearest);
+					material->set("u_Texture", texture);
+					render_mesh.materials = {material};
+				}
 			}
 		}
 	}

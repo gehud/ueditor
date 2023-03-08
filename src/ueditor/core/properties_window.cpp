@@ -9,6 +9,7 @@ namespace ueditor {
 	PropertiesWindow::PropertiesWindow() : EditorWindow("Properties") {
 		add<TransformComponentDrawer>();
 		add<CameraComponentDrawer>();
+		add<RenderMeshComponentDrawer>();
 	}
 
 	void PropertiesWindow::on_imgui() {

@@ -46,7 +46,7 @@ namespace ueditor {
 
     void ExplorerWindow::create_file() {
         Path path = _directory_path + "/file";
-        FileStream new_file(path);
+        File new_file(path);
         UENGINE_ASSERT(new_file, "Failed to create file.");
         _selected_path = path;
         rename_selected();
@@ -300,7 +300,7 @@ namespace ueditor {
         if (ImGui::BeginDragDropSource()) {
             auto path_string = path.string();
             auto extension = path.extension();
-            ImGui::SetDragDropPayload("EXPLORER_ITEM", path_string.data(), (path_string.length() + 1), ImGuiCond_Once);
+            ImGui::SetDragDropPayload("EXPLORER_ITEM", path_string.data(), (path_string.length() + 1) * sizeof(char), ImGuiCond_Once);
             ImGui::EndDragDropSource();
         }
 

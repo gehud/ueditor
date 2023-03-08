@@ -13,6 +13,7 @@
 #include "ueditor/core/camera_controller.h"
 
 #include <uengine/core/scene.h>
+#include <uengine/core/io/file.h>
 #include <uengine/core/rendering/framebuffer.h>
 #include <uengine/core/rendering/model.h>
 
@@ -22,6 +23,8 @@ namespace ueditor {
 	class EditorApplication : public Application {
 	public:
 		EditorApplication() {
+			auto ini_file = File(Directory::current() + "/ueditor.ini", OpenMode::In);
+			
 			EditorWindow::add<ExplorerWindow>();
 			EditorWindow::get<ExplorerWindow>()->open();
 
@@ -239,7 +242,7 @@ namespace ueditor {
 			auto assets_path = _project_path + "/assets";
 			if (Directory::exists(assets_path)) {
 				Assets::path(assets_path);
-				import_assets(assets_path);
+				Assets::initialize(Assets::path());
 			}
 		}
 
@@ -264,7 +267,7 @@ namespace ueditor {
 				auto result = Directory::create(data_path);
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
-			FileStream fs(data_path + "/CMakeLists.txt", OpenMode::Out);
+			File fs(data_path + "/CMakeLists.txt", OpenMode::Out);
 			UENGINE_ASSERT(fs, "Failed to create CMakeLists.txt.");
 			auto install_prefix = (Path::current() + "/..").string().replace('\\', '/');
 			fs << "cmake_minimum_required(VERSION 3.10)\n";
@@ -300,7 +303,7 @@ namespace ueditor {
 
 			auto assembly = Reflection::reflect(_project_path + "/assets");
 
-			FileStream glue_h_stream(src_path + "/glue.h", OpenMode::Out);
+			File glue_h_stream(src_path + "/glue.h", OpenMode::Out);
 			glue_h_stream << "#pragma once\n";
 			glue_h_stream << "#include <uengine/core/system.h>\n";
 			glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API int get_system_count();\n";
@@ -311,7 +314,7 @@ namespace ueditor {
 			}
 			glue_h_stream.close();
 
-			FileStream glue_cpp_stream(src_path + "/glue.cpp", OpenMode::Out);
+			File glue_cpp_stream(src_path + "/glue.cpp", OpenMode::Out);
 			glue_cpp_stream << "#include \"glue.h\"\n";
 			for (auto& type : assembly.types()) {
 				glue_cpp_stream << "#include \"" << Path::relative(type.path(), _project_path + "/source").string().data() << "\"\n";
