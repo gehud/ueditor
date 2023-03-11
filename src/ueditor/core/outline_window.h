@@ -18,12 +18,15 @@ namespace ueditor {
 			Entity entity;
 
 			explicit operator bool() const noexcept { 
-				return entity != Entity::null(); 
+				return world != nullptr && entity != Entity::null(); 
 			}
 		};
 
 		static Selection _selection;
 
+		static void reset();
+
+		friend class EditorApplication;
 		friend class PropertiesWindow;
 	};
 }

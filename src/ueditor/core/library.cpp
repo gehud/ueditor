@@ -3,8 +3,8 @@
 #include <Windows.h>
 
 namespace ueditor {
-	Library::Library(const String& path) {
-		_handle = LoadLibrary(path.data());
+	Library::Library(const Path& path) {
+		_handle = LoadLibrary(path.string().data());
 		UENGINE_ASSERT(_handle, "Failed to load library.");
 	}
 

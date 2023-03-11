@@ -1,6 +1,7 @@
 #include "ueditor/core/scene_serializer.h"
 
 #include "ueditor/core/assets.h"
+#include "ueditor/core/camera_controller.h"
 
 #include <uengine/core/transform.h>
 #include <uengine/core/uuid.h>
@@ -115,6 +116,16 @@ namespace ueditor {
 			out << YAML::EndMap;
 		}
 
+		if (world.has_component<CameraController>(entity)) {
+			auto& camera_controller = world.get_component<CameraController>(entity);
+			out << YAML::Key << "EditorCameraController" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "Pitch" << YAML::Value << camera_controller.pitch;
+			out << YAML::Key << "Sensitivity" << YAML::Value << camera_controller.sensitivity;
+			out << YAML::Key << "Speed" << YAML::Value << camera_controller.speed;
+			out << YAML::Key << "Yaw" << YAML::Value << camera_controller.yaw;
+			out << YAML::EndMap;
+		}
+
 		out << YAML::EndMap;
 	}
 
@@ -131,12 +142,12 @@ namespace ueditor {
 		});
 		out << YAML::EndSeq;
 		out << YAML::EndMap;
-		File file(path, OpenMode::Out);
+		File file(path, FileMode::Out);
 		file << out.c_str();
 	}
 
 	void SceneSerializer::deserialize(const Path& path) {
-		File file(path, OpenMode::In);
+		File file(path, FileMode::In);
 	
 		YAML::Node data = YAML::Load(file.string().data());
 		if (!data["Scene"])
@@ -151,7 +162,52 @@ namespace ueditor {
 
 		auto& world = _scene->world();
 
+
+		int editor_camera_entity_index = -1;
+		int counter = 0;
+		// Find editor camera and add it first.
 		for (auto entity_data : entities) {
+			if (entity_data["EditorCameraController"]) {
+				editor_camera_entity_index = counter;
+
+				auto entity = world.create_entity();
+				auto camera_controller_data = entity_data["EditorCameraController"];
+				auto& camera_controller = world.add_component<CameraController>(entity);
+				camera_controller.pitch = camera_controller_data["Pitch"].as<float>();
+				camera_controller.sensitivity = camera_controller_data["Sensitivity"].as<float>();
+				camera_controller.speed = camera_controller_data["Speed"].as<float>();
+				camera_controller.yaw = camera_controller_data["Yaw"].as<float>();
+
+				if (entity_data["Transform"]) {
+				auto transform_data = entity_data["Transform"];
+				auto& transform = world.add_component<Transform>(entity);
+				transform.position = transform_data["Position"].as<Float3>();
+				transform.rotation = transform_data["Rotation"].as<Float4>();
+				transform.scale = transform_data["Scale"].as<Float3>();
+				transform.euler_angles_hint = transform_data["EulerAnglesHint"].as<Float3>();
+				}
+
+				if (entity_data["Camera"]) {
+					auto camera_data = entity_data["Camera"];
+					auto& camera = world.add_component<Camera>(entity);
+					camera.projection = (Camera::Projection)camera_data["Projection"].as<int>();
+					camera.fov = camera_data["FOV"].as<float>();
+					camera.size = camera_data["Size"].as<float>();
+					camera.near_plane = camera_data["NearPlane"].as<float>();
+					camera.far_plane = camera_data["FarPlane"].as<float>();
+					camera.clear_color = camera_data["ClearColor"].as<Float4>();
+					camera.is_base = camera_data["IsBase"].as<bool>();
+				}
+			}
+
+			++counter;
+		}
+
+		counter = 0;
+		for (auto entity_data : entities) {
+			if (counter == editor_camera_entity_index)
+				continue;
+				
 			auto entity = world.create_entity();
 
 			if (entity_data["Transform"]) {
@@ -190,6 +246,8 @@ namespace ueditor {
 					render_mesh.materials = {material};
 				}
 			}
+
+			++counter;
 		}
 	}
 }

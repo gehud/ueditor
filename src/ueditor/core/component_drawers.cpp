@@ -84,8 +84,13 @@ namespace ueditor {
 			auto payload = ImGui::AcceptDragDropPayload("EXPLORER_ITEM");
 			if (payload) {
 				Path path((const char*)payload->Data);
-				if (path.extension() == ".mesh") {
-					render_mesh.mesh = Assets::load<Mesh>(path);
+				auto filename = path.filename().string();
+				if (filename.find("sub_asset_") != -1) {
+					int last_of_us = filename.find_last_of('_');
+            		ULong uuid = filename.substring(last_of_us + 1).as<ULong>();
+					if (Assets::type(uuid) == "Mesh") {
+						render_mesh.mesh = Assets::load<Mesh>(uuid);
+					}
 				}
 			}
 			ImGui::EndDragDropTarget();

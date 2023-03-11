@@ -20,10 +20,10 @@ namespace ueditor {
 		const auto& entity = OutlineWindow::_selection.entity;
 
 		for (auto& pair : _drawers) {
-			if (world.has_component(entity, pair.key)) {
-				if (ImGui::TreeNodeEx((void*)pair.value->type_index().hash_code(), ImGuiTreeNodeFlags_Selected, pair.value->name().data())) {
-					pair.value->target(world.get_component(entity, pair.key));
-					pair.value->on_imgui();
+			if (world.has_component(entity, pair.key())) {
+				if (ImGui::TreeNodeEx((void*)pair.value()->type_index().hash_code(), ImGuiTreeNodeFlags_Selected, pair.value()->name().data())) {
+					pair.value()->target(world.get_component(entity, pair.key()));
+					pair.value()->on_imgui();
 					ImGui::TreePop();
 				}
 			}

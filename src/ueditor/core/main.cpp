@@ -22,9 +22,7 @@ using namespace uengine;
 namespace ueditor {
 	class EditorApplication : public Application {
 	public:
-		EditorApplication() {
-			auto ini_file = File(Directory::current() + "/ueditor.ini", OpenMode::In);
-			
+		EditorApplication() {			
 			EditorWindow::add<ExplorerWindow>();
 			EditorWindow::get<ExplorerWindow>()->open();
 
@@ -41,6 +39,10 @@ namespace ueditor {
 			EditorWindow::get<ViewportWindow>()->open();
 			_framebuffer = make_shared<Framebuffer>();
 			EditorWindow::get<ViewportWindow>()->framebuffer(_framebuffer);
+
+			World::register_system(typeid(CameraControllerSystem).hash_code(), 
+				[](){ return (System*)(new CameraControllerSystem()); },
+				[](System* s) { delete (CameraControllerSystem*)s; });
 		}
 	protected:
 		void on_start() override {
@@ -55,7 +57,7 @@ namespace ueditor {
 			scene->world().add_component<CameraController>(editor_camera_entity);
 			auto& editor_camera = scene->world().add_component<Camera>(editor_camera_entity);
 			editor_camera.clear_color = {0.1f, 0.1f, 0.1f, 1.0f};
-			scene->world().create_system<CameraControllerSystem>();
+
 			auto camera_entity = scene->world().create_entity();
 			auto& camera = scene->world().add_component<Camera>(camera_entity);
 			camera.clear_color = {0.1f, 0.2f, 0.1f, 1.0f};
@@ -123,8 +125,13 @@ namespace ueditor {
 						open_file();
 					}
 
-					if (ImGui::MenuItem("Project", "Ctrl+P")) {
-						open_project();
+
+					ImGui::EndMenu();
+				}
+
+				if (ImGui::BeginMenu("Project")) {
+					if (ImGui::MenuItem("Open", "Ctrl+P")) {
+						open_project(FilesystemDialog::open_folder());
 					}
 
 					ImGui::EndMenu();
@@ -132,8 +139,8 @@ namespace ueditor {
 
 				if (ImGui::BeginMenu("Window")) {
 					for (auto& pair : EditorWindow::windows()) {
-						if (ImGui::MenuItem(pair.value->name().data())) {
-							pair.value->open();
+						if (ImGui::MenuItem(pair.value()->name().data())) {
+							pair.value()->open();
 						}
 					}
 					ImGui::EndMenu();
@@ -183,7 +190,7 @@ namespace ueditor {
 			EditorWindow::update();
 		}
 	private:
-		String _project_path;
+		Path _project_path;
 		SharedPtr<Framebuffer> _framebuffer;
 		SharedPtr<Library> _scripts;
 
@@ -202,16 +209,15 @@ namespace ueditor {
 				break;
 			case UENGINE_KEY_P:
 				if (control) {
-					open_project();
+					open_project(FilesystemDialog::open_folder());
 				}
 				break;
 			}
 		}
 
 		void save_file() {
-			auto destination = FileDialog::save_file("UEngine Scene (*.uengine)\0*.uengine\0");
+			auto destination = FilesystemDialog::save_file("UEngine Scene (*.uengine)\0*.uengine\0");
 			if (destination.is_empty()) {
-				Log::error("Wrong path.");
 				return;
 			}
 			SceneSerializer ss(Scene::active());
@@ -219,55 +225,80 @@ namespace ueditor {
 		}
 
 		void open_file() {
-			auto source = FileDialog::open_file("UEngine Scene (*.uengine)\0*.uengine\0");
+			auto source = FilesystemDialog::open_file("UEngine Scene (*.uengine)\0*.uengine\0");
 			if (source.is_empty()) {
-				Log::error("Wrong path.");
 				return;
 			}
+			
+			// Open relevan project.
+			Path project_path;
+			auto path = source.parent();
+			while (!path.is_empty()) {
+				if ((path / ".uengine").exists()) {
+					project_path = path;
+					break;
+				}
+				path = path.parent();
+			}
+
+			if (project_path.is_empty()) {
+				Log::error("Failed to determine scene relevant project.");
+				return;
+			}
+
+			open_project(project_path);
+
 			auto scene = make_shared<Scene>();
 			SceneSerializer ss(scene); 
 			ss.deserialize(source);
+			EditorWindow::get<OutlineWindow>()->reset();
 			Scene::load(scene);
 		}
 
-		void open_project() {
-			_project_path = FileDialog::open_folder();
-			if (_project_path.is_empty()) {
-				Log::error("Wrong path.");
+		void open_project(const Path& path) {
+			if (path.is_empty() || _project_path == path) {
 				return;
 			}
 
+			_project_path = path;
+
 			EditorWindow::get<ExplorerWindow>()->project_path(_project_path);
 			
-			auto assets_path = _project_path + "/assets";
-			if (Directory::exists(assets_path)) {
-				Assets::path(assets_path);
-				Assets::initialize(Assets::path());
+			auto assets_path = _project_path / "assets";
+			if (!assets_path.exists()) {
+				Directory::create(assets_path);
 			}
+
+			auto cache_path = _project_path / ".uengine";
+			if (!cache_path.exists()) {
+				Directory::create(cache_path);
+			}
+
+			Assets::initialize(assets_path, cache_path);
 		}
 
 		void import_assets(const Path& path) {
-			Directory::for_each(path, [&](DirectoryEntry entry) {
+			Directory::for_each(path, [&](auto entry) {
 				if (entry.is_directory()) {
 					import_assets(entry.path());
 				} else if (entry.path().extension() == ".fbx") {
-					Assets::import(Path::relative(entry.path(), Assets::path()));
+					Assets::import(entry.path().relative(Assets::path()));
 				}
 			});
 		}
 
 		void compile_project() {
-			if (_project_path.is_empty() || !Directory::exists(_project_path + "/assets")) {
+			if (_project_path.is_empty() || !(_project_path / "assets").exists()) {
 				Log::error("Wrong path.");
 				return;
 			}
 
-			auto data_path = _project_path + "/.uengine";
-			if (!Path::exists(data_path)) {
+			auto data_path = _project_path / ".uengine";
+			if (!data_path.exists()) {
 				auto result = Directory::create(data_path);
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
-			File fs(data_path + "/CMakeLists.txt", OpenMode::Out);
+			File fs(data_path + "/CMakeLists.txt", FileMode::Out);
 			UENGINE_ASSERT(fs, "Failed to create CMakeLists.txt.");
 			auto install_prefix = (Path::current() + "/..").string().replace('\\', '/');
 			fs << "cmake_minimum_required(VERSION 3.10)\n";
@@ -283,27 +314,27 @@ namespace ueditor {
 			fs << "set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME \"example\")\n";
 			fs << "install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})";
 			fs.close();
-			auto src_path = data_path + "/src";
-			if (!Path::exists(src_path)) {
+			auto src_path = data_path / "src";
+			if (!src_path.exists()) {
 				auto result = Directory::create(src_path);
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
 
-			auto build_path = data_path + "/build";
-			if (!Path::exists(build_path)) {
+			auto build_path = data_path / "build";
+			if (!build_path.exists()) {
 				auto result = Directory::create(build_path);
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
 
-			auto install_path = data_path + "/install";
-			if (!Path::exists(install_path)) {
+			auto install_path = data_path / "install";
+			if (!install_path.exists()) {
 				auto result = Directory::create(install_path);
 				UENGINE_ASSERT(result, "Failed to create directory.");
 			}
 
 			auto assembly = Reflection::reflect(_project_path + "/assets");
 
-			File glue_h_stream(src_path + "/glue.h", OpenMode::Out);
+			File glue_h_stream(src_path / "glue.h", FileMode::Out);
 			glue_h_stream << "#pragma once\n";
 			glue_h_stream << "#include <uengine/core/system.h>\n";
 			glue_h_stream << "extern \"C\" UENGINE_SCRIPT_API int get_system_count();\n";
@@ -314,10 +345,10 @@ namespace ueditor {
 			}
 			glue_h_stream.close();
 
-			File glue_cpp_stream(src_path + "/glue.cpp", OpenMode::Out);
+			File glue_cpp_stream(src_path / "glue.cpp", FileMode::Out);
 			glue_cpp_stream << "#include \"glue.h\"\n";
 			for (auto& type : assembly.types()) {
-				glue_cpp_stream << "#include \"" << Path::relative(type.path(), _project_path + "/source").string().data() << "\"\n";
+				glue_cpp_stream << "#include \"" << type.path().relative(_project_path + "/source").string().data() << "\"\n";
 				glue_cpp_stream << "uengine::System* allocate_" << type.name() << "() {\n";
 				glue_cpp_stream << "	return new " << type.name() << "();\n";
 				glue_cpp_stream << "}\n";
@@ -334,10 +365,10 @@ namespace ueditor {
 			glue_cpp_stream << "}";
 			glue_cpp_stream.close();
 
-			auto command = "cd " + data_path + "/build" + " && cmake .. && cmake --build . && cmake --install . --prefix \"" + data_path + "/install\" --config Debug";
+			auto command = "cd " + data_path.string() + "/build" + " && cmake .. && cmake --build . && cmake --install . --prefix \"" + data_path.string() + "/install\" --config Debug";
 			std::system(command.data());
 
-			_scripts = make_shared<Library>(install_path + "/bin/example.dll");
+			_scripts = make_shared<Library>(install_path / "bin/example.dll");
 			auto c = _scripts->get<int()>("get_system_count");
 			auto s = _scripts->get<void(char**, int*)>("get_systems");
 			int count = c();

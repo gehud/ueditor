@@ -5,6 +5,7 @@
 #include "ueditor/core/editor_window.h"
 
 #include <uengine/core/io/path.h>
+#include <uengine/core/collections/dictionary.h>
 #include <uengine/core/rendering/texture.h>
 
 namespace ueditor {
@@ -27,6 +28,9 @@ namespace ueditor {
 		SharedPtr<Texture2D> _file_icon;
 		SharedPtr<Texture2D> _cube_icon;
 		SharedPtr<Texture2D> _mesh_icon;
+		Dictionary<Path, List<ULong>> _uuids;
+		Dictionary<Path, Dictionary<ULong, String>> _names;
+		Dictionary<Path, Dictionary<ULong, String>> _types;
 
 		Path get_directory_path_from_selected();
 
@@ -38,7 +42,7 @@ namespace ueditor {
 
 		bool directory_tree(const char* label, ImGuiTreeNodeFlags flags, ImTextureID icon, float* icon_width = nullptr, bool* is_pressed = nullptr);
 
-		void make_tree(const Path& path);
+		void make_tree(const Path& path, bool is_asset = false);
 
 		void delete_selected();
 
@@ -47,6 +51,8 @@ namespace ueditor {
 		void handle_delete();
 
 		void handle_rename();
+
+		void open_externaly();
 	};
 }
 

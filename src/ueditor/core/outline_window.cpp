@@ -10,9 +10,14 @@ namespace ueditor {
 
 	OutlineWindow::OutlineWindow() : EditorWindow("Outline") {}
 
+	void OutlineWindow::reset() {
+		_selection = {};
+	}
+
 	void OutlineWindow::on_imgui() {
 		auto& scene = Scene::active();
 		if (!scene) {
+			_selection = {};
 			return;
 		}
 

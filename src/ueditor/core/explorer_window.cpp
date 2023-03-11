@@ -1,8 +1,14 @@
 #include "ueditor/core/explorer_window.h"
 
+#include "ueditor/core/assets.h"
+
 #include <uengine/core/io/directory.h>
 #include <uengine/core/io/file.h>
 #include <uengine/core/ui/imgui.h>
+
+#ifdef UENGINE_WINDOWS
+#include <Windows.h>
+#endif
 
 namespace ueditor {
 	ExplorerWindow::ExplorerWindow() : EditorWindow("Explorer") {
@@ -52,8 +58,24 @@ namespace ueditor {
         rename_selected();
     }
 
+    void ExplorerWindow::open_externaly() {
+        Path directory;
+        if (!_selected_path.is_directory())
+            directory = _selected_path.parent();
+        else
+            directory = _selected_path;
+        
+#ifdef UENGINE_WINDOWS
+        ShellExecuteA(NULL, "open", directory.string().data(), NULL, NULL, SW_SHOWDEFAULT);
+#endif
+    }
+
     void ExplorerWindow::handle_popup() {
         if (ImGui::BeginPopupContextItem()) {
+            ImGui::TextDisabled("File");
+            if (ImGui::MenuItem("External"))
+                open_externaly();
+
             ImGui::TextDisabled("Create");
 
             if (ImGui::MenuItem("Folder"))
@@ -274,24 +296,48 @@ namespace ueditor {
             || ImGui::IsKeyDown(ImGuiKey_DownArrow);
     }
 
-    void ExplorerWindow::make_tree(const Path& path) {
+    void ExplorerWindow::make_tree(const Path& path, bool is_asset) {
         String filename = path.filename().string();
+        ULong uuid = 0;
+        if (is_asset) {
+            if (!_names.has(path))
+                _names.add(path, {});
+            auto& names = _names[path];
+            int last_of_us = filename.find_last_of('_');
+            uuid = filename.substring(last_of_us + 1).as<ULong>();
+            if (!names.has(uuid))
+                names.add(uuid, Assets::name(uuid));
+            filename = names[uuid];
+        }
+
+        auto meta_path = path + ".meta";
+        bool is_complex_asset = !is_asset && meta_path.exists() && Assets::is_complex(meta_path);
 
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_FramePadding;
-        flags |= (!path.is_directory() || path.is_empty()) ? ImGuiTreeNodeFlags_Bullet : 0;
+        flags |= (!is_asset && (path.is_directory() || is_complex_asset)) ? 0 : ImGuiTreeNodeFlags_Bullet;
         flags |= _selected_path == path ? ImGuiTreeNodeFlags_Selected : 0;
+
         const char* label = _rename_path == path ? "##Rename" : filename.data();
+
         ImTextureID icon = nullptr;
-        if (path.extension() == ".fbx") {
+        if (is_asset) {
+            if (!_types.has(path))
+                _types.add(path, {});
+            auto& types = _types[path];
+            if (!types.has(uuid)) 
+                types.add(uuid, Assets::type(uuid));
+            if (types[uuid] == "Mesh")
+                icon = reinterpret_cast<ImTextureID>(_mesh_icon->id());
+        } else if (path.extension() == ".fbx") {
             icon = reinterpret_cast<ImTextureID>(_cube_icon->id());
-        } else if (path.extension() == ".mesh") {
-            icon = reinterpret_cast<ImTextureID>(_mesh_icon->id());
         } else if (!path.is_directory()) {
             icon = reinterpret_cast<ImTextureID>(_file_icon->id());
         }
         float icon_width = 0.0f;
+
         bool is_pressed = false;
         bool opened = directory_tree(label, flags, icon, &icon_width, &is_pressed);
+
         if (is_pressed || (is_keyboard_focus() && ImGui::IsItemFocused())) {
             _selected_path = path;
             _directory_path = get_directory_path_from_selected();
@@ -329,13 +375,21 @@ namespace ueditor {
             }
         }
 
-        if (opened && path.is_directory()) {
-            Directory::for_each(path, [&](DirectoryEntry entry) {
-                if (entry.path().filename() != ".uengine" 
-                && entry.path().extension() != ".meta") {
-                    make_tree(entry.path());
-                }
-            });
+        if (opened) {
+            if (path.is_directory()) {
+                Directory::for_each(path, [&](auto entry) {
+                    if (entry.path().filename() != ".uengine" 
+                    && entry.path().extension() != ".meta") {
+                        make_tree(entry.path());
+                    }
+                });
+            } else if (is_complex_asset) {
+                if (!_uuids.has(path))
+                    _uuids.add(path, Assets::uuids(meta_path));
+                auto& uuids = _uuids[path];
+                for (int i = 1; i < uuids.count(); i++) 
+                    make_tree(path + ".sub_asset_" + String(uuids[i]), true);
+            }
         }
 
         if (opened) {
@@ -344,7 +398,6 @@ namespace ueditor {
     }
 
 #ifdef UENGINE_WINDOWS
-#include <Windows.h>
     static bool move_to_recicle_bin(const Path& path) {
         auto string = path.string() + '\0';
         SHFILEOPSTRUCT operation{};
@@ -357,7 +410,9 @@ namespace ueditor {
 #endif
 
     void ExplorerWindow::delete_selected() {
-        if (_selected_path.is_empty() || _selected_path == _project_path)
+        if (_selected_path.is_empty() 
+            || _selected_path == _project_path 
+            || _selected_path.string().find("sub_asset_") != -1)
             return;
         bool remove_result;
 #ifdef UENGINE_WINDOWS
@@ -368,11 +423,23 @@ namespace ueditor {
 #endif
         if (_selected_path == _directory_path)
             _directory_path.clear();
+
+        if (_uuids.has(_selected_path))
+            _uuids.remove(_selected_path);
+        if (_names.has(_selected_path)) {
+            _names.remove(_selected_path);
+        }
+        if (_types.has(_selected_path)) {
+            _types.remove(_selected_path);
+        }
+
         _selected_path.clear();
     }
 
     void ExplorerWindow::rename_selected() {
-        if (_selected_path.is_empty() || _selected_path == _project_path)
+        if (_selected_path.is_empty() 
+        || _selected_path == _project_path 
+        || _selected_path.string().find("sub_asset_") != -1)
             return;
 
         _rename_path = _selected_path;

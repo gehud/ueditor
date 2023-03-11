@@ -6,9 +6,13 @@
 #include <uengine/core/memory.h>
 #include <uengine/core/traits.h>
 #include <uengine/core/object.h>
+#include <uengine/core/traits.h>
 #include <uengine/core/io/path.h>
 #include <uengine/core/rendering/mesh.h>
+#include <uengine/core/rendering/shader.h>
+#include <uengine/core/rendering/material.h>
 #include <uengine/core/collections/dictionary.h>
+#include <uengine/core/collections/list.h>
 
 using namespace uengine;
 
@@ -18,43 +22,67 @@ namespace ueditor {
 	 */
 	class Assets {
 	public:
-		static const Path& path();
+		enum class ImportMode {
+			Default,
+			Force
+		};
 
-		static void path(const Path& path);
+		static const Path& path();
 
 		static Path path(const ULong& uuid);
 
-		static ULong uuid(const Path& path);
-
 		static ULong uuid(const SharedPtr<Object>& object);
 
-		static void import(const Path& path);
-		
-		template<typename T>
+		static ULong uuid(const Path& path);
+
+		static List<ULong> uuids(const Path& path);
+
+		static String name(const ULong& uuid);
+
+		static String type(const ULong& uuid);
+
+		static bool is_complex(const Path& path);	
+
+		static void import(const Path& path, ImportMode import_mode = ImportMode::Default);
+
+		template<DerivedFrom<Object> T>
+		static SharedPtr<T> load(const ULong& uuid) {
+			if (IsSame<T, Mesh>::value) {
+				return load_mesh(uuid);
+			}
+
+			Log::error("Unsupported asset format");
+			return nullptr;
+		}
+
+		static List<SharedPtr<Object>> load_all(const ULong& uuid);
+
+		static List<SharedPtr<Object>> load_all(const Path& path);
+
+		//TODO: Load subassets.
+
+		template<DerivedFrom<Object> T>
 		static SharedPtr<T> load(const Path& path) {
-			if (path.extension() != ".mesh" || !IsSame<T, Mesh>::value) {
-				Log::error("Unsupported asset format.");
+			ULong uuid = Assets::uuid(path);
+			if (uuid == 0) {
+				Log::error("Failed to load asset.");
 				return nullptr;
 			}
 
-			return load_mesh(path);
-		}
-
-		template<typename T>
-		static SharedPtr<T> load(const ULong& uuid) {
-			auto path = Assets::path(uuid);
-			if (!path.is_empty()) {
-				return load<T>(path);
-			}
+			return load<T>(uuid);
 		}
 	private:
-		static Dictionary<ULong, Path> _paths;
-		static Dictionary<SharedPtr<Object>, ULong> _uids;
-		static Path _path;
+		static Dictionary<WeakPtr<Object>, ULong> _loaded;
+		static Path _assets;
+		static Path _cache;
 
-		static SharedPtr<Mesh> load_mesh(const Path& path);
+		static void import_all(const Path& path, ImportMode import_mode = ImportMode::Default);
 
-		static void initialize(const Path& path);
+		static void initialize(const Path& assets, const Path& cache);
+
+		static void import_model(const Path& path, ImportMode import_mode = ImportMode::Default);
+
+		static SharedPtr<Mesh> load_mesh(const ULong& uuid);
 
 		friend class EditorApplication;
 	};
