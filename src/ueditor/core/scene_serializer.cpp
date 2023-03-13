@@ -110,9 +110,18 @@ namespace ueditor {
 		if (world.has_component<RenderMesh>(entity)) {
 			auto& render_mesh = world.get_component<RenderMesh>(entity);
 			out << YAML::Key << "RenderMesh" << YAML::Value << YAML::BeginMap;
-			if (render_mesh.mesh) {
+
+			if (render_mesh.mesh)
 				out << YAML::Key << "Mesh" << YAML::Value << Assets::uuid(render_mesh.mesh);
+
+			if (render_mesh.materials.count() != 0)
+				out << YAML::Key << "Materials" << YAML::Value;
+			for (int i = 0; i < render_mesh.materials.count(); i++) {
+				out << YAML::BeginSeq;
+				out << Assets::uuid(render_mesh.materials[i]);
+				out << YAML::EndSeq;
 			}
+
 			out << YAML::EndMap;
 		}
 
@@ -148,7 +157,7 @@ namespace ueditor {
 
 	void SceneSerializer::deserialize(const Path& path) {
 		File file(path, FileMode::In);
-	
+
 		YAML::Node data = YAML::Load(file.string().data());
 		if (!data["Scene"])
 			return;
@@ -207,7 +216,7 @@ namespace ueditor {
 		for (auto entity_data : entities) {
 			if (counter == editor_camera_entity_index)
 				continue;
-				
+
 			auto entity = world.create_entity();
 
 			if (entity_data["Transform"]) {
@@ -236,14 +245,11 @@ namespace ueditor {
 				auto& render_mesh = world.add_component<RenderMesh>(entity);
 				if (render_mesh_data["Mesh"]) {
 					render_mesh.mesh = Assets::load<Mesh>(render_mesh_data["Mesh"].as<ULong>());
+				}
 
-					// Temp.
-					auto shader = make_shared<Shader>("../assets/shaders/texture.glsl");
-					auto material = make_shared<Material>(shader);
-					auto texture = make_shared<Texture2D>("../assets/textures/checkerboard.png");
-					texture->filter_mode(Texture::FilterMode::Nearest);
-					material->set("u_Texture", texture);
-					render_mesh.materials = {material};
+				if (render_mesh_data["Materials"]) {
+					for (auto uuid : render_mesh_data["Materials"])
+						render_mesh.materials.add(Assets::load<Material>(uuid.as<ULong>()));
 				}
 			}
 

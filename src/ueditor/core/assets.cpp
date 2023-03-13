@@ -93,7 +93,9 @@ namespace ueditor {
 
 	void Assets::import_all(const Path& path, ImportMode import_mode) {
 		Directory::for_each(path, [&](auto entry) {
-			if (entry.path().extension() == ".fbx") {
+			if (entry.path().extension() == ".glsl" 
+			|| entry.path().extension() == ".material" 
+			|| entry.path().extension() == ".fbx") {
 				import(entry.path(), import_mode);
 			} else if (entry.is_directory()) {
 				import_all(entry.path());
@@ -109,7 +111,13 @@ namespace ueditor {
 
 	void Assets::import(const Path& path, ImportMode import_mode) {
 		auto absolute_path = Assets::path() / path;
-		if (absolute_path.extension() == ".fbx") {
+		if (absolute_path.extension() == ".glsl") {
+			import_shader(absolute_path, import_mode);
+			return;
+		} else if (absolute_path.extension() == ".material") {
+			import_material(absolute_path, import_mode);
+			return;
+		} else if (absolute_path.extension() == ".fbx") {
 			import_model(absolute_path, import_mode);
 			return;
 		}
@@ -117,38 +125,84 @@ namespace ueditor {
 		Log::error("Connot import asset.");
 	}
 
-	List<SharedPtr<Object>> Assets::load_all(const ULong& uuid) {
-		File assets_file(_cache / "assets", FileMode::In);
-		YAML::Node node = YAML::Load(assets_file.string().data());
-		if (!node[uuid]) {
-			Log::error("Asset is not imported.");
-			return {};
-		}
 
-		node = node[uuid];
+	void Assets::import_shader(const Path& path, ImportMode import_mode) {
+		File meta_file(path + ".meta", FileMode::In);
+		YAML::Node meta_file_node = YAML::Load(meta_file.string().data());
+		if (meta_file_node["Self"] && import_mode == ImportMode::Default)
+			return;
 		
-		if (node["Type"].as<std::string>() == "Model") {
-			int count = node["SubAssets"].size();
-			List<SharedPtr<Object>> result;
-			node = node["SubAssets"];
-			for (int i = 0; i < count; i++) {
-				result.add(load_mesh(node[i].as<ULong>()));
-			}
-			return result;
-		}
+		meta_file.close();
 
-		Log::error("Missing asset loader.");
-		return {};
+		UUID uuid;
+	
+		File source_file(path, FileMode::In);
+		YAML::Emitter artifacts_out;
+		artifacts_out << YAML::BeginMap;
+		artifacts_out << YAML::Key << uuid << YAML::Value;
+		artifacts_out << YAML::BeginMap; 
+		artifacts_out << YAML::Key << "Type" << YAML::Value << "Shader";
+		artifacts_out << YAML::Key << "Source" << YAML::Value << source_file.string().data();
+		artifacts_out << YAML::EndMap; 
+		artifacts_out << YAML::EndMap;
+		auto artifacts_path = _cache / "artifacts";
+		File artifacts_file(artifacts_path, FileMode::Out | FileMode::Append);
+		artifacts_file << artifacts_out.c_str() << '\n';
+
+		YAML::Emitter meta_out;
+		meta_out << YAML::BeginMap;
+		meta_out << YAML::Key << "Self" << YAML::Value << uuid;
+		meta_out << YAML::EndMap;
+		meta_file.open(path + ".meta", FileMode::Out);
+		meta_file << meta_out.c_str();
+
+		YAML::Emitter assets_out;
+		assets_out << YAML::BeginMap;
+		assets_out << YAML::Key << uuid << YAML::Value;
+		assets_out << YAML::BeginMap;
+		assets_out << YAML::Key << "Path" << YAML::Value << path.relative(_assets).string().data();
+		assets_out << YAML::EndMap;
+		assets_out << YAML::EndMap;
+		File assets_file(_cache / "assets", FileMode::Out | FileMode::Append);
+		assets_file << assets_out.c_str() << '\n';
 	}
 
-	List<SharedPtr<Object>> Assets::load_all(const Path& path) {
-		auto uuid = Assets::uuid(path);
-		if (uuid == 0) {
-			Log::error("Failed to load assets.");
-			return {};
-		}
+	void Assets::import_material(const Path& path, ImportMode import_mode) {
+		File meta_file(path + ".meta", FileMode::In);
+		YAML::Node meta_file_node = YAML::Load(meta_file.string().data());
+		if (meta_file_node["Self"] && import_mode == ImportMode::Default)
+			return;
+		
+		meta_file.close();
 
-		return uengine::move(load_all(uuid));
+		UUID uuid;
+
+		YAML::Emitter artifats_out;
+		artifats_out << YAML::BeginMap;
+		artifats_out << YAML::Key << uuid << YAML::Value;
+		artifats_out << YAML::BeginMap;
+		artifats_out << YAML::Key << "Type" << YAML::Value << "Material";
+		artifats_out << YAML::EndMap;
+		artifats_out << YAML::EndMap;
+		File artifacts(_cache / "artifacts", FileMode::Out | FileMode::Append);
+		artifacts << artifats_out.c_str() << '\n';
+
+		YAML::Emitter meta_out;
+		meta_out << YAML::BeginMap;
+		meta_out << YAML::Key << "Self" << YAML::Value << uuid;
+		meta_out << YAML::EndMap;
+		meta_file.open(path + ".meta", FileMode::Out);
+		meta_file << meta_out.c_str();
+
+		YAML::Emitter assets_out;
+		assets_out << YAML::BeginMap;
+		assets_out << YAML::Key << uuid << YAML::Value;
+		assets_out << YAML::BeginMap;
+		assets_out << YAML::Key << "Path" << YAML::Value << path.relative(_assets).string().data();
+		assets_out << YAML::EndMap;
+		assets_out << YAML::EndMap;
+		File assets_file(_cache / "assets", FileMode::Out | FileMode::Append);
+		assets_file << assets_out.c_str() << '\n';	
 	}
 
 	void Assets::import_model(const Path& path, ImportMode import_mode) {
@@ -156,6 +210,8 @@ namespace ueditor {
 		YAML::Node meta_file_node = YAML::Load(meta_file.string().data());
 		if (meta_file_node["Self"] && import_mode == ImportMode::Default)
 			return;
+
+		meta_file.close();
 
 		Model model(path);
 		List<UUID> uuids;	
@@ -237,7 +293,7 @@ namespace ueditor {
 
 			auto artifacts_path = _cache / "artifacts";
 			File artifacts_file(artifacts_path, FileMode::Out | FileMode::Append);
-			artifacts_file << out.c_str();
+			artifacts_file << out.c_str() << '\n';
 		}
 
 		YAML::Emitter out;
@@ -260,7 +316,6 @@ namespace ueditor {
 		assets_out << YAML::BeginMap;
 		assets_out << YAML::Key << uuid << YAML::Value;
 		assets_out << YAML::BeginMap;
-		assets_out << YAML::Key << "Type" << YAML::Value << "Model";
 		assets_out << YAML::Key << "Path" << YAML::Value << path.relative(_assets).string().data();
 		assets_out << YAML::Key << "SubAssets" << YAML::Value;
 		assets_out << YAML::BeginSeq;
@@ -270,7 +325,79 @@ namespace ueditor {
 		assets_out << YAML::EndSeq;
 		assets_out << YAML::EndMap;
 		assets_out << YAML::EndMap;
-		assets_file << assets_out.c_str();
+		assets_file << assets_out.c_str() << '\n';
+	}
+
+	SharedPtr<Shader> Assets::load_shader(const ULong& uuid) {
+		File artifacts(_cache / "artifacts", FileMode::In);
+		YAML::Node node = YAML::Load(artifacts.string().data());
+		if (!node[uuid]) {
+			Log::error("Failed to load shader.");
+			return nullptr;
+		}
+
+		artifacts.close();
+
+		auto i = _loaded.find_if([&](const auto& pair) { return pair.value() == uuid; });
+		if (i != _loaded.end()) {
+			if (i->key().is_valid())
+				return static_pointer_cast<Shader>(SharedPtr<Object>(i->key()));
+			else 
+				_loaded.remove(i);
+		}
+
+		String source = node[uuid]["Source"].as<std::string>(); 
+
+		int vertex_shader_position = source.find_first_of("#type vertex");
+		if (vertex_shader_position == -1) {
+			Log::error("Syntax error.");
+			return nullptr;
+		}
+
+		int fragment_shader_position = source.find_first_of("#type fragment");
+		if (fragment_shader_position == -1) {
+			Log::error("Syntax error.");
+			return nullptr;
+		}
+
+		auto vertex_source = source.substring(vertex_shader_position, fragment_shader_position);
+		auto fragment_source = source.substring(fragment_shader_position);
+
+		auto shader = make_shared<Shader>(vertex_source, fragment_source);
+		_loaded.add(shader, uuid);
+		return shader;
+	}
+
+	SharedPtr<Material> Assets::load_material(const ULong& uuid) {
+		File assets(_cache / "assets", FileMode::In);
+		YAML::Node node = YAML::Load(assets.string().data());
+		if (!node[uuid]) {
+			Log::error("Failed to load material.");
+			return nullptr;
+		}
+		
+		node = node[uuid];
+
+		auto i = _loaded.find_if([&](const auto& pair) { return pair.value() == uuid; });
+		if (i != _loaded.end()) {
+			if (i->key().is_valid())
+				return static_pointer_cast<Material>(SharedPtr<Object>(i->key()));
+			else
+				_loaded.remove(i);
+		}
+
+		File meta(_assets / String(node["Path"].as<std::string>()), FileMode::In);
+		YAML::Node meta_node = YAML::Load(meta.string().data());
+		SharedPtr<Shader> shader;
+		if (meta_node["Shader"])
+			shader = load_shader(meta_node["Shader"].as<ULong>());
+
+		if (!shader)
+			shader = make_shared<Shader>("../assets/shaders/fallback.glsl");
+
+		auto material = make_shared<Material>(shader);
+		_loaded.add(material, uuid);
+		return material;
 	}
 
 	SharedPtr<Mesh> Assets::load_mesh(const ULong& uuid) {
@@ -280,6 +407,12 @@ namespace ueditor {
 			Log::error("Failed to load mesh.");
 			return nullptr;
 		}
+
+		file.close();
+
+		auto i = _loaded.find_if([&](const auto& pair) { return pair.value() == uuid; });
+		if (i != _loaded.end() && i->key().is_valid())
+			return static_pointer_cast<Mesh>(SharedPtr<Object>(i->key()));
 
 		node = node[uuid];
 		

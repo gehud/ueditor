@@ -1,23 +1,19 @@
 #include "ueditor/core/outline_window.h"
 
 #include "ueditor/core/camera_controller.h"
+#include "ueditor/core/properties_window.h"
+#include "ueditor/core/selection.h"
+#include "ueditor/core/ui/editor_imgui.h"
 
 #include <uengine/core/scene.h>
 #include <uengine/core/ui/imgui.h>
 
 namespace ueditor {
-	OutlineWindow::Selection OutlineWindow::_selection;
-
 	OutlineWindow::OutlineWindow() : EditorWindow("Outline") {}
-
-	void OutlineWindow::reset() {
-		_selection = {};
-	}
 
 	void OutlineWindow::on_imgui() {
 		auto& scene = Scene::active();
 		if (!scene) {
-			_selection = {};
 			return;
 		}
 
@@ -29,20 +25,36 @@ namespace ueditor {
 					return;
 				}
 				ImGuiTreeNodeFlags flags = 0;
-				if (_selection)
-					if (_selection.world == &world && _selection.entity == entity)
-						flags |= ImGuiTreeNodeFlags_Selected;
+				if (dynamic_cast<Entity*>(Selection::object()) && *static_cast<Entity*>(Selection::object()) == _selected)
+					flags |= ImGuiTreeNodeFlags_Selected;
 
 				if (ImGui::TreeNodeEx("Entity", ImGuiTreeNodeFlags_Leaf | flags)) {
 					ImGui::TreePop();
 				}
 
 				if (ImGui::IsItemClicked()) {
-					_selection = {&world, entity};
+					Selection::context(&world);
+					_selected = entity;
+					Selection::object(&_selected);
 				}
 			});
 
 			ImGui::TreePop();
+		}
+
+		if (ImGui::BeginPopupContextItem()) {
+			ImGui::TextDisabled("Actions");
+			if (ImGui::MenuItem("Delete")) {
+				if (dynamic_cast<Entity*>(Selection::object()))
+					scene->world().destroy_entity(*static_cast<Entity*>(Selection::object()));
+			}
+
+			ImGui::TextDisabled("Create");
+			if (ImGui::MenuItem("Entity")) {
+				scene->world().create_entity();
+			}
+
+			ImGui::EndPopup();
 		}
 	}
 }

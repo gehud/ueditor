@@ -47,17 +47,24 @@ namespace ueditor {
 
 		template<DerivedFrom<Object> T>
 		static SharedPtr<T> load(const ULong& uuid) {
-			if (IsSame<T, Mesh>::value) {
-				return load_mesh(uuid);
-			}
-
 			Log::error("Unsupported asset format");
 			return nullptr;
 		}
 
-		static List<SharedPtr<Object>> load_all(const ULong& uuid);
+		template<>
+		static SharedPtr<Shader> load(const ULong& uuid) {
+			return load_shader(uuid);
+		}
 
-		static List<SharedPtr<Object>> load_all(const Path& path);
+		template<>
+		static SharedPtr<Material> load(const ULong& uuid) {
+			return load_material(uuid);
+		}
+
+		template<>
+		static SharedPtr<Mesh> load(const ULong& uuid) {
+			return load_mesh(uuid);
+		}
 
 		//TODO: Load subassets.
 
@@ -80,7 +87,15 @@ namespace ueditor {
 
 		static void initialize(const Path& assets, const Path& cache);
 
+		static void import_shader(const Path& path, ImportMode import_mode = ImportMode::Default);
+
+		static void import_material(const Path& path, ImportMode import_mode = ImportMode::Default);
+
 		static void import_model(const Path& path, ImportMode import_mode = ImportMode::Default);
+
+		static SharedPtr<Shader> load_shader(const ULong& uuid);
+
+		static SharedPtr<Material> load_material(const ULong& uuid);
 
 		static SharedPtr<Mesh> load_mesh(const ULong& uuid);
 

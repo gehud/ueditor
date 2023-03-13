@@ -4,6 +4,7 @@
 #include "ueditor/core/assets.h"
 #include "ueditor/core/library.h"
 #include "ueditor/core/reflection.h"
+#include "ueditor/core/selection.h"
 #include "ueditor/core/explorer_window.h"
 #include "ueditor/core/outline_window.h"
 #include "ueditor/core/output_window.h"
@@ -11,6 +12,7 @@
 #include "ueditor/core/viewport_window.h"
 #include "ueditor/core/scene_serializer.h"
 #include "ueditor/core/camera_controller.h"
+#include "ueditor/core/ui/editor_imgui.h"
 
 #include <uengine/core/scene.h>
 #include <uengine/core/io/file.h>
@@ -22,7 +24,7 @@ using namespace uengine;
 namespace ueditor {
 	class EditorApplication : public Application {
 	public:
-		EditorApplication() {			
+		EditorApplication() {	
 			EditorWindow::add<ExplorerWindow>();
 			EditorWindow::get<ExplorerWindow>()->open();
 
@@ -43,47 +45,19 @@ namespace ueditor {
 			World::register_system(typeid(CameraControllerSystem).hash_code(), 
 				[](){ return (System*)(new CameraControllerSystem()); },
 				[](System* s) { delete (CameraControllerSystem*)s; });
+
+			Input::on_key_pressed += UENGINE_BIND_METHOD_PTR(Input::KeyPressedEvent, this, &EditorApplication::on_key_pressed);
 		}
 	protected:
 		void on_start() override {
 			Window::instance()->vsync(true);
-			Log::info("Hello, UEngine!");
-			auto scene = make_shared<Scene>();
-
-			// Editor camera
-			auto editor_camera_entity = scene->world().create_entity();
-			auto& editor_camera_transform = scene->world().add_component<Transform>(editor_camera_entity);
-			editor_camera_transform.position = {0.0f, 0.0f, -3.0f};
-			scene->world().add_component<CameraController>(editor_camera_entity);
-			auto& editor_camera = scene->world().add_component<Camera>(editor_camera_entity);
-			editor_camera.clear_color = {0.1f, 0.1f, 0.1f, 1.0f};
-
-			auto camera_entity = scene->world().create_entity();
-			auto& camera = scene->world().add_component<Camera>(camera_entity);
-			camera.clear_color = {0.1f, 0.2f, 0.1f, 1.0f};
-			auto& transform = scene->world().add_component<Transform>(camera_entity);
-			transform.position = Float3::back() * 4.0f + Float3::up() * 1.0f;
-			auto cube = scene->world().create_entity();
-			auto& render_mesh = scene->world().add_component<RenderMesh>(cube);
-			auto cube_model = make_shared<Model>("../assets/models/cube.fbx");
-			render_mesh.mesh = cube_model->meshes()[0];
-			auto shader = make_shared<Shader>("../assets/shaders/texture.glsl");
-			auto material = make_shared<Material>(shader);
-			auto texture = make_shared<Texture2D>("../assets/textures/checkerboard.png");
-			texture->filter_mode(Texture::FilterMode::Nearest);
-			material->set("u_Texture", texture);
-
-			render_mesh.materials = {material};
-
-			Scene::load(scene);
-
-			Input::on_key_pressed += UENGINE_BIND_METHOD_PTR(Input::KeyPressedEvent, this, &EditorApplication::on_key_pressed);
 		}
 
 		void on_update() override {
 			// Drawing loaded scenes.
 			_framebuffer->bind();
-			Scene::active()->world().update();
+			if (Scene::active())
+				Scene::active()->world().update();
 			_framebuffer->unbind();
 
 			// Background.
@@ -117,6 +91,9 @@ namespace ueditor {
 
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("File")) {
+					if (ImGui::MenuItem("New", "Ctrl+N"))
+						create_file();
+
 					if (ImGui::MenuItem("Save", "Ctrl+S")) {
 						save_file();
 					}
@@ -188,6 +165,9 @@ namespace ueditor {
 			ImGui::End();
 
 			EditorWindow::update();
+
+			EditorIMGUI::flush();
+			Selection::flush();
 		}
 	private:
 		Path _project_path;
@@ -197,6 +177,11 @@ namespace ueditor {
 		void on_key_pressed(int key, int repreat_count) {
 			bool control = Input::is_key(UENGINE_KEY_LEFT_CONTROL);
 			switch (key) {
+			case UENGINE_KEY_N:
+				if (control) {
+					create_file();
+				}
+				break;
 			case UENGINE_KEY_S:
 				if (control) {
 					save_file();
@@ -209,10 +194,22 @@ namespace ueditor {
 				break;
 			case UENGINE_KEY_P:
 				if (control) {
-					open_project(FilesystemDialog::open_folder());
+					open_project();
 				}
 				break;
 			}
+		}
+
+		void create_file() {
+			auto scene = make_shared<Scene>();
+			// Editor camera
+			auto editor_camera_entity = scene->world().create_entity();
+			auto& editor_camera_transform = scene->world().add_component<Transform>(editor_camera_entity);
+			editor_camera_transform.position = {0.0f, 0.0f, -3.0f};
+			scene->world().add_component<CameraController>(editor_camera_entity);
+			auto& editor_camera = scene->world().add_component<Camera>(editor_camera_entity);
+			editor_camera.clear_color = {0.1f, 0.1f, 0.1f, 1.0f};
+			Scene::load(scene);
 		}
 
 		void save_file() {
@@ -224,21 +221,20 @@ namespace ueditor {
 			ss.serialize(destination);
 		}
 
-		void open_file() {
-			auto source = FilesystemDialog::open_file("UEngine Scene (*.uengine)\0*.uengine\0");
-			if (source.is_empty()) {
+		void open_file(const Path& path = FilesystemDialog::open_file("UEngine Scene (*.uengine)\0*.uengine\0")) {
+			if (path.is_empty()) {
 				return;
 			}
-			
+
 			// Open relevan project.
 			Path project_path;
-			auto path = source.parent();
+			auto current_path = path.parent();
 			while (!path.is_empty()) {
-				if ((path / ".uengine").exists()) {
-					project_path = path;
+				if ((current_path / ".uengine").exists()) {
+					project_path = current_path;
 					break;
 				}
-				path = path.parent();
+				current_path = current_path.parent();
 			}
 
 			if (project_path.is_empty()) {
@@ -250,12 +246,11 @@ namespace ueditor {
 
 			auto scene = make_shared<Scene>();
 			SceneSerializer ss(scene); 
-			ss.deserialize(source);
-			EditorWindow::get<OutlineWindow>()->reset();
+			ss.deserialize(path);
 			Scene::load(scene);
 		}
 
-		void open_project(const Path& path) {
+		void open_project(const Path& path = FilesystemDialog::open_folder()) {
 			if (path.is_empty() || _project_path == path) {
 				return;
 			}
@@ -281,7 +276,9 @@ namespace ueditor {
 			Directory::for_each(path, [&](auto entry) {
 				if (entry.is_directory()) {
 					import_assets(entry.path());
-				} else if (entry.path().extension() == ".fbx") {
+				} else if (entry.path().extension() == ".fbx" 
+				&& entry.path().extension() == ".glsl" 
+				&& entry.path().extension() == ".material") {
 					Assets::import(entry.path().relative(Assets::path()));
 				}
 			});

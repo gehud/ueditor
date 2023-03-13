@@ -19,6 +19,7 @@ namespace ueditor {
 	protected:
 		void on_imgui() override;
 	private:
+		static SharedPtr<Object> _selected;
 		Path _project_path;
 		Path _directory_path;
 		Path _selected_path;
@@ -28,6 +29,7 @@ namespace ueditor {
 		SharedPtr<Texture2D> _file_icon;
 		SharedPtr<Texture2D> _cube_icon;
 		SharedPtr<Texture2D> _mesh_icon;
+		SharedPtr<Texture2D> _sphere_icon;
 		Dictionary<Path, List<ULong>> _uuids;
 		Dictionary<Path, Dictionary<ULong, String>> _names;
 		Dictionary<Path, Dictionary<ULong, String>> _types;
@@ -37,6 +39,10 @@ namespace ueditor {
 		void create_folder();
 
 		void create_file();
+
+		void create_shader();
+
+		void create_material();
 
 		void handle_popup();
 
@@ -53,6 +59,8 @@ namespace ueditor {
 		void handle_rename();
 
 		void open_externaly();
+
+		friend class PropertiesWindow;
 	};
 }
 

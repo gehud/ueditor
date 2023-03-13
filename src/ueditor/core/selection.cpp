@@ -1,9 +1,34 @@
-#include "UEditor/core/selection.h"
+#include "ueditor/core/selection.h"
 
-namespace uengine {
-    void* Selection::_context = nullptr;
+namespace ueditor {
+    Object* Selection::_context = nullptr;
+    Object* Selection::_object = nullptr;
 
-    void* Selection::context() {
+    Object* Selection::context() {
         return _context;
+    }
+
+     Object* Selection::object() {
+        return _object;
+    }
+
+    void Selection::context(Object* value) {
+        _context = value;
+    }
+
+    void Selection::object(Object* value) {
+        _object = value;
+    }
+
+    void Selection::object_with_context(Object* object, Object* context) {
+        _object = object;
+        _context = _context;
+    }
+
+    void Selection::flush() {
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered()) {
+            _context = nullptr;
+            _object = nullptr;
+        }
     }
 }

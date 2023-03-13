@@ -4,17 +4,28 @@
 
 #include <uengine/core/string.h>
 #include <uengine/core/traits.h>
-#include <uengine/core/collections/dictionary.h>
-#include <uengine/core/math/vector2.h>
+#include <uengine/core/object.h>
 #include <uengine/core/ui/imgui.h>
+#include <uengine/core/math/vector2.h>
+#include <uengine/core/collections/dictionary.h>
 
 using namespace uengine;
 
 namespace ueditor {
-	class EditorWindow : public ImGuiWindowClass {
+	class EditorWindow : public Object, public ImGuiWindowClass {
 	public:
 		EditorWindow(const String& name) : _name(name) {
 			DockNodeFlagsOverrideSet |= ImGuiDockNodeFlags_NoWindowMenuButton;
+		}
+
+		static EditorWindow* focused();
+
+		bool is_focused() const {
+			return _is_focused;
+		}
+
+		bool is_item_clicked() const {
+			return _is_item_clicked;
 		}
 
 		const String& name() const {
@@ -36,10 +47,13 @@ namespace ueditor {
 		virtual void on_imgui() {}
 	private:
 		static Dictionary<Size, SharedPtr<EditorWindow>> _windows;
+		static EditorWindow* _focused;
 		String _name;
 		bool _is_opened = false;
 		Float2 _size;
 		ImGuiWindowFlags _window_flags = 0;
+		bool _is_focused = false;
+		bool _is_item_clicked = false;
 
 		static Dictionary<Size, SharedPtr<EditorWindow>>& windows();
 

@@ -1,6 +1,9 @@
 #include "ueditor/core/explorer_window.h"
 
 #include "ueditor/core/assets.h"
+#include "ueditor/core/selection.h"
+#include "ueditor/core/properties_window.h"
+#include "ueditor/core/ui/editor_imgui.h"
 
 #include <uengine/core/io/directory.h>
 #include <uengine/core/io/file.h>
@@ -11,12 +14,15 @@
 #endif
 
 namespace ueditor {
+    SharedPtr<Object> ExplorerWindow::_selected;
+
 	ExplorerWindow::ExplorerWindow() : EditorWindow("Explorer") {
 		_folder_icon = make_shared<Texture2D>("../assets/textures/folder.png");
 		_folder_open_icon = make_shared<Texture2D>("../assets/textures/folder_open.png");
 		_file_icon = make_shared<Texture2D>("../assets/textures/file.png");
 		_cube_icon = make_shared<Texture2D>("../assets/textures/cube.png");
 		_mesh_icon = make_shared<Texture2D>("../assets/textures/mesh.png");
+		_sphere_icon = make_shared<Texture2D>("../assets/textures/sphere.png");
 	}
 
 	void ExplorerWindow::on_imgui() {
@@ -24,13 +30,12 @@ namespace ueditor {
             return;
 
         make_tree(_project_path);
-        if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)
-            || ((ImGui::IsMouseClicked(ImGuiMouseButton_Left)
-                || ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-                && !ImGui::IsAnyItemHovered())) {
+        bool is_properties_window_focused = dynamic_cast<PropertiesWindow*>(EditorWindow::focused()) != nullptr; 
+        if (!is_focused() && !is_properties_window_focused) {
             _selected_path.clear();
             _directory_path.clear();
             _rename_path.clear();
+            _selected = nullptr;
         }
         handle_delete();
         handle_rename();
@@ -52,11 +57,27 @@ namespace ueditor {
 
     void ExplorerWindow::create_file() {
         Path path = _directory_path + "/file";
-        File new_file(path);
+        File new_file(path, FileMode::Out);
         UENGINE_ASSERT(new_file, "Failed to create file.");
         _selected_path = path;
         rename_selected();
     }
+
+    void ExplorerWindow::create_shader() {
+        Path path = _directory_path + "/shader.glsl";
+        File new_file(path, FileMode::Out);
+        UENGINE_ASSERT(new_file, "Failed to create file.");
+        _selected_path = path;
+        rename_selected();
+    } 
+
+    void ExplorerWindow::create_material() {
+        Path path = _directory_path / "material.material";
+        File new_file(path, FileMode::Out);
+        UENGINE_ASSERT(new_file, "Failed to create file.");
+        _selected_path = path;
+        rename_selected();
+    }    
 
     void ExplorerWindow::open_externaly() {
         Path directory;
@@ -76,6 +97,14 @@ namespace ueditor {
             if (ImGui::MenuItem("External"))
                 open_externaly();
 
+            ImGui::TextDisabled("Actions");
+
+            if (ImGui::MenuItem("Rename"))
+                rename_selected();
+
+            if (ImGui::MenuItem("Delete"))
+                delete_selected();
+
             ImGui::TextDisabled("Create");
 
             if (ImGui::MenuItem("Folder"))
@@ -84,13 +113,11 @@ namespace ueditor {
             if (ImGui::MenuItem("File"))
                 create_file();
 
-            ImGui::TextDisabled("Actions");
+            if (ImGui::MenuItem("Shader"))
+                create_shader();
 
-            if (ImGui::MenuItem("Rename"))
-                rename_selected();
-
-            if (ImGui::MenuItem("Delete"))
-                delete_selected();
+            if (ImGui::MenuItem("Material"))
+                create_material();
 
             ImGui::EndPopup();
         }
@@ -330,6 +357,8 @@ namespace ueditor {
                 icon = reinterpret_cast<ImTextureID>(_mesh_icon->id());
         } else if (path.extension() == ".fbx") {
             icon = reinterpret_cast<ImTextureID>(_cube_icon->id());
+        } else if (path.extension() == ".material") {
+            icon = reinterpret_cast<ImTextureID>(_sphere_icon->id());
         } else if (!path.is_directory()) {
             icon = reinterpret_cast<ImTextureID>(_file_icon->id());
         }
@@ -338,16 +367,24 @@ namespace ueditor {
         bool is_pressed = false;
         bool opened = directory_tree(label, flags, icon, &icon_width, &is_pressed);
 
-        if (is_pressed || (is_keyboard_focus() && ImGui::IsItemFocused())) {
-            _selected_path = path;
-            _directory_path = get_directory_path_from_selected();
+        bool drag_drop = false;
+        if (IMGUI::begin_drag_drop_source()) {
+            auto extension = path.extension();
+            if (extension == ".material")
+                EditorIMGUI::set_object_payload(Assets::load<Material>(Assets::uuid(path + ".meta")));
+            IMGUI::end_drag_drop_source();
+            drag_drop = true;
         }
 
-        if (ImGui::BeginDragDropSource()) {
-            auto path_string = path.string();
+        if (!drag_drop && is_pressed || (is_keyboard_focus() && ImGui::IsItemFocused())) {
+            _selected_path = path;
+            _directory_path = get_directory_path_from_selected();
             auto extension = path.extension();
-            ImGui::SetDragDropPayload("EXPLORER_ITEM", path_string.data(), (path_string.length() + 1) * sizeof(char), ImGuiCond_Once);
-            ImGui::EndDragDropSource();
+            if (extension == ".material") {
+                _selected = Assets::load<Material>(Assets::uuid(path + ".meta"));
+                Selection::context(nullptr);
+                Selection::object(_selected.get());
+            }
         }
 
         handle_popup();
@@ -369,7 +406,7 @@ namespace ueditor {
             ImGui::PopStyleColor();
 
             if (ImGui::IsKeyDown(ImGuiKey_Enter)) {
-                int result = std::rename(path.string().data(), (path + "/" + buffer).string().data());
+                int result = std::rename(path.string().data(), (path.parent() / buffer).string().data());
                 UENGINE_ASSERT(!result, "Failed to rename.");
                 _rename_path.clear();
             }
@@ -388,7 +425,7 @@ namespace ueditor {
                     _uuids.add(path, Assets::uuids(meta_path));
                 auto& uuids = _uuids[path];
                 for (int i = 1; i < uuids.count(); i++) 
-                    make_tree(path + ".sub_asset_" + String(uuids[i]), true);
+                    make_tree(path + ".asset_" + String(uuids[i]), true);
             }
         }
 
@@ -412,7 +449,7 @@ namespace ueditor {
     void ExplorerWindow::delete_selected() {
         if (_selected_path.is_empty() 
             || _selected_path == _project_path 
-            || _selected_path.string().find("sub_asset_") != -1)
+            || _selected_path.string().find("asset_") != -1)
             return;
         bool remove_result;
 #ifdef UENGINE_WINDOWS
@@ -439,7 +476,7 @@ namespace ueditor {
     void ExplorerWindow::rename_selected() {
         if (_selected_path.is_empty() 
         || _selected_path == _project_path 
-        || _selected_path.string().find("sub_asset_") != -1)
+        || _selected_path.string().find("asset_") != -1)
             return;
 
         _rename_path = _selected_path;
